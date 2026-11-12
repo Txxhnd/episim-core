@@ -105,11 +105,13 @@ structure, interventions, time-varying parameters, parameter fitting, or
 effective reproduction number (`Rt`).
 
 The solver uses a fixed step and has no error control. Choose a step that is
-small compared with `1 / beta`, `1 / sigma`, and `1 / gamma`. A run stops
-with an error if a value becomes non-finite, a compartment goes materially
-negative, or the population drifts. A step that is too large can also return
-a plausible-looking but wrong trajectory without any error, so check
-important results against a run with half the step.
+small compared with `1 / beta`, `1 / sigma`, and `1 / gamma`. A run is
+rejected with `TimeStepTooLarge` if any rate times the step exceeds 2.785,
+the point where RK4 becomes unstable, and it stops with an error if a value
+becomes non-finite, a compartment goes materially negative, or the
+population drifts. Below that limit a coarse step is still inaccurate and
+nothing detects it, so check important results against a run with half the
+step.
 The whole trajectory is kept in memory (32 bytes per step for SIR, 40 for
 SEIR), and a run is limited to 1,000,000 steps unless you raise the limit
 with `SimulationSettings::with_max_steps`.

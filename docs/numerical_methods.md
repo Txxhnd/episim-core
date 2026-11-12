@@ -93,17 +93,23 @@ checks, in this order.
   entirely on the step you choose.
 - RK4 is an explicit method. If the step is large compared with the fastest
   time scale (`1 / beta`, `1 / sigma`, or `1 / gamma`), the solution becomes
-  inaccurate and can become unstable.
-- **An unstable or inaccurate run is not always detected.** The checks above
-  catch a run only when a value becomes non-finite, a compartment goes
-  materially negative, or the population drifts. For a compartment that
-  should decay at rate `r`, RK4 multiplies it each step by
+  inaccurate and, past a limit, unstable.
+- **Instability is rejected up front.** For a compartment that should decay
+  at rate `r`, RK4 multiplies it each step by
   `1 - z + z^2/2 - z^3/6 + z^4/24` with `z = r * step`. That factor exceeds 1
   once `z` is above about 2.785, so the compartment grows when it should
-  shrink. With `beta = 0`, `gamma = 3`, and a step of one day the factor is
-  1.375: the infected compartment grows by 37.5% per step, stays positive,
-  and conserves the population, so the run returns `Ok` with a wrong
-  trajectory. Keep `gamma * step` and `sigma * step` well below 1.
+  shrink, while staying positive and conserving the population. The per-step
+  checks cannot see that: with `beta = 0`, `gamma = 3`, and a step of one
+  day the infected compartment would grow by 37.5% per step. Each rate
+  bounds how fast one compartment empties (`beta` for susceptible, `sigma`
+  for exposed, `gamma` for infected), so a run is rejected with
+  `TimeStepTooLarge { parameter }` before integration if `beta * step`,
+  `sigma * step`, or `gamma * step` exceeds 2.785.
+- **Inaccuracy is not detected.** The limit above is a stability limit, not
+  an accuracy target. Just below it a run may still fail on a negative
+  compartment, or succeed with large errors: at `gamma * step = 2` the
+  infected compartment falls to 33% per step where the exact value is 14%.
+  Keep every rate times the step well below 1.
 - Positivity is not enforced by the method.
 - Peak metrics are taken from recorded observations, so the peak time is
   resolved only to the nearest step.

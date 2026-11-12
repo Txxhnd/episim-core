@@ -212,3 +212,35 @@ fn sir_first_step_matches_model_equations() {
         );
     }
 }
+
+#[test]
+fn sir_rejects_step_too_large_for_stable_integration() {
+    // RK4 turns decay into growth once a rate times the step exceeds about
+    // 2.785, without any negative value or drift to give it away.
+    let run = |beta_per_day, gamma_per_day, step| {
+        let parameters = SirParameters {
+            beta_per_day,
+            gamma_per_day,
+        };
+        simulate_sir(parameters, INITIAL, settings(10.0, step))
+    };
+
+    assert_eq!(
+        run(0.0, 2.786, 1.0).unwrap_err(),
+        SimulationError::TimeStepTooLarge {
+            parameter: "gamma_per_day"
+        }
+    );
+    assert_eq!(
+        run(2.786, 0.1, 1.0).unwrap_err(),
+        SimulationError::TimeStepTooLarge {
+            parameter: "beta_per_day"
+        }
+    );
+
+    // Exactly at the limit the run is accepted and the infected still decay.
+    let at_limit = run(0.0, 2.785, 1.0).unwrap();
+    assert!(at_limit.trajectory[10].state.infected < INITIAL.infected);
+    // The same rate is fine with a smaller step.
+    assert!(run(0.0, 2.786, 0.5).is_ok());
+}

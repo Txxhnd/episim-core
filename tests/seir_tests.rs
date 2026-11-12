@@ -232,3 +232,43 @@ fn seir_first_step_matches_model_equations() {
         );
     }
 }
+
+#[test]
+fn seir_rejects_step_too_large_for_stable_integration() {
+    // RK4 turns decay into growth once a rate times the step exceeds about
+    // 2.785, without any negative value or drift to give it away.
+    let run = |beta_per_day, sigma_per_day, gamma_per_day, step| {
+        let parameters = SeirParameters {
+            beta_per_day,
+            sigma_per_day,
+            gamma_per_day,
+        };
+        simulate_seir(parameters, INITIAL, settings(10.0, step))
+    };
+    let too_large = |parameter| SimulationError::TimeStepTooLarge { parameter };
+
+    assert_eq!(
+        run(2.786, 0.2, 0.1, 1.0).unwrap_err(),
+        too_large("beta_per_day")
+    );
+    assert_eq!(
+        run(0.0, 2.786, 0.1, 1.0).unwrap_err(),
+        too_large("sigma_per_day")
+    );
+    assert_eq!(
+        run(0.0, 0.2, 2.786, 1.0).unwrap_err(),
+        too_large("gamma_per_day")
+    );
+
+    // Exactly at the limit this guard does not fire. The run is still too
+    // coarse to succeed: the per-step checks stop it when a compartment goes
+    // negative, so it fails with an error and not with a wrong trajectory.
+    assert_eq!(
+        run(0.0, 2.785, 0.1, 1.0).unwrap_err(),
+        SimulationError::NegativeCompartment {
+            compartment: "infected"
+        }
+    );
+    // The same rate is fine with a smaller step.
+    assert!(run(0.0, 2.786, 0.1, 0.5).is_ok());
+}

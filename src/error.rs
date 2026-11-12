@@ -25,6 +25,13 @@ pub enum SimulationError {
     StepLimitExceeded,
     /// The timestep is too small to advance the floating-point simulation clock.
     TimeStepTooSmall,
+    /// The timestep is too large for the solver to integrate stably with one
+    /// of the rate parameters: their product exceeds the stability limit of
+    /// the classical Runge-Kutta method, about 2.785.
+    TimeStepTooLarge {
+        /// Name of the rate parameter the timestep is too large for.
+        parameter: &'static str,
+    },
     /// A solver stage produced a non-finite intermediate value.
     NonFiniteIntermediate {
         /// Solver stage in which the non-finite value appeared.
@@ -69,6 +76,10 @@ impl fmt::Display for SimulationError {
             Self::TimeStepTooSmall => {
                 f.write_str("timestep is too small to advance the simulation clock")
             }
+            Self::TimeStepTooLarge { parameter } => write!(
+                f,
+                "timestep is too large for stable integration with `{parameter}`"
+            ),
             Self::NonFiniteIntermediate { stage } => {
                 write!(f, "non-finite intermediate value in solver stage `{stage}`")
             }
