@@ -393,3 +393,78 @@ fn seir_records_every_nth_step_without_changing_the_integration() {
     // The peak is read from fewer observations, so it can only be lower or equal.
     assert!(thinned.metrics.peak_infectious <= full.metrics.peak_infectious);
 }
+
+/// Largest compartment difference between a run and a reference run whose
+/// step is `stride` times smaller, at the times of the first run.
+fn error_against_reference(
+    run: &[Observation<SeirState>],
+    reference: &[Observation<SeirState>],
+    stride: usize,
+) -> f64 {
+    run.iter()
+        .enumerate()
+        .flat_map(|(index, observation)| {
+            let (state, exact) = (observation.state, reference[index * stride].state);
+            [
+                (state.susceptible - exact.susceptible).abs(),
+                (state.exposed - exact.exposed).abs(),
+                (state.infected - exact.infected).abs(),
+                (state.recovered - exact.recovered).abs(),
+            ]
+        })
+        .fold(0.0, f64::max)
+}
+
+#[test]
+fn seir_step_error_estimate_matches_the_error_against_a_fine_reference() {
+    let parameters = PARAMETERS;
+    let run = |step| simulate_seir(parameters, INITIAL, settings(40.0, step)).unwrap();
+    let estimate =
+        episim_core::estimate_seir_step_error(parameters, INITIAL, settings(40.0, 1.0)).unwrap();
+
+    // A step 256 times smaller stands in for the exact solution.
+    let actual = error_against_reference(&run(1.0).trajectory, &run(1.0 / 256.0).trajectory, 256);
+    let ratio = estimate.max_absolute_error / actual;
+    assert!(
+        (0.9..1.1).contains(&ratio),
+        "estimated {}, actual {actual}",
+        estimate.max_absolute_error
+    );
+    // INITIAL holds a population of 1000.
+    assert_eq!(
+        estimate.max_relative_error,
+        estimate.max_absolute_error / 1000.0
+    );
+}
+
+#[test]
+fn seir_step_error_estimate_falls_about_sixteenfold_when_the_step_is_halved() {
+    let parameters = PARAMETERS;
+    let estimate = |step| {
+        episim_core::estimate_seir_step_error(parameters, INITIAL, settings(40.0, step))
+            .unwrap()
+            .max_absolute_error
+    };
+    for step in [1.0, 0.5] {
+        let ratio = estimate(step) / estimate(step / 2.0);
+        assert!((12.0..18.0).contains(&ratio), "step {step}: ratio {ratio}");
+    }
+}
+
+#[test]
+fn seir_step_error_estimate_follows_the_recording_interval_and_reports_errors() {
+    let every_step = settings(40.0, 0.5);
+    let sparse = every_step.with_record_every(8).unwrap();
+    let all = episim_core::estimate_seir_step_error(PARAMETERS, INITIAL, every_step).unwrap();
+    let some = episim_core::estimate_seir_step_error(PARAMETERS, INITIAL, sparse).unwrap();
+    // The largest error over fewer recorded times cannot be larger.
+    assert!(some.max_absolute_error > 0.0);
+    assert!(some.max_absolute_error <= all.max_absolute_error);
+
+    // A run the simulation rejects is rejected here with the same error.
+    let limited = settings(10.0, 1.0).with_max_steps(9).unwrap();
+    assert_eq!(
+        episim_core::estimate_seir_step_error(PARAMETERS, INITIAL, limited).unwrap_err(),
+        SimulationError::StepLimitExceeded
+    );
+}

@@ -70,6 +70,19 @@ impl SimulationSettings {
         })
     }
 
+    /// The same run at half the timestep, recording the same times.
+    ///
+    /// Halving the step doubles the number of steps, so the step limit and
+    /// the recording interval are doubled with it.
+    pub(crate) fn halved(&self) -> Self {
+        Self {
+            duration_days: self.duration_days,
+            step_days: self.step_days / 2.0,
+            max_steps: self.max_steps.saturating_mul(2),
+            record_every: self.record_every.saturating_mul(2),
+        }
+    }
+
     /// Total simulation duration in days.
     pub fn duration_days(&self) -> f64 {
         self.duration_days

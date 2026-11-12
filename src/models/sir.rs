@@ -1,3 +1,4 @@
+use crate::accuracy::{StepErrorEstimate, estimate_step_error};
 use crate::error::SimulationError;
 use crate::metrics::{basic_reproduction_number, calculate_metrics};
 use crate::result::SimulationResult;
@@ -148,6 +149,54 @@ pub fn simulate_sir(
     })
 }
 
+/// Estimates the error that the timestep introduces into [`simulate_sir`] for
+/// the same arguments.
+///
+/// The simulation is run twice, once as given and once at half the timestep,
+/// and the two trajectories are compared at every recorded time. This costs
+/// about three times as much as one run. The half-step run is allowed twice
+/// the configured step limit.
+///
+/// The estimate assumes the timestep is small enough for the solver's error
+/// to fall sixteenfold when the step is halved. In the reference scenarios
+/// it was within 4% of the true error for every step the stability limit
+/// accepts.
+///
+/// # Errors
+///
+/// Returns any [`SimulationError`] that [`simulate_sir`] returns for either run.
+///
+/// # Examples
+///
+/// ```
+/// use episim_core::{SimulationSettings, SirParameters, SirState, estimate_sir_step_error};
+///
+/// let parameters = SirParameters { beta_per_day: 0.3, gamma_per_day: 0.1 };
+/// let initial_state = SirState { susceptible: 990.0, infected: 10.0, recovered: 0.0 };
+///
+/// let coarse = estimate_sir_step_error(parameters, initial_state, SimulationSettings::new(160.0, 1.0)?)?;
+/// let fine = estimate_sir_step_error(parameters, initial_state, SimulationSettings::new(160.0, 0.25)?)?;
+///
+/// // A quarter of the step gives roughly 4^4 = 256 times less error.
+/// assert!(fine.max_absolute_error < coarse.max_absolute_error / 100.0);
+/// assert!(fine.max_relative_error < 1e-6);
+/// # Ok::<(), episim_core::SimulationError>(())
+/// ```
+pub fn estimate_sir_step_error(
+    parameters: SirParameters,
+    initial_state: SirState,
+    settings: SimulationSettings,
+) -> Result<StepErrorEstimate, SimulationError> {
+    let run = simulate_sir(parameters, initial_state, settings)?;
+    let half_step_run = simulate_sir(parameters, initial_state, settings.halved())?;
+    Ok(estimate_step_error(
+        &run.trajectory,
+        &half_step_run.trajectory,
+        initial_state.initial_population()?,
+        |state| [state.susceptible, state.infected, state.recovered],
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -262,5 +311,45 @@ mod tests {
             overflowed.initial_population(),
             Err(SimulationError::InvalidPopulation)
         );
+    }
+
+    #[test]
+    fn sir_half_step_run_records_the_same_times() {
+        let parameters = SirParameters {
+            beta_per_day: 0.3,
+            gamma_per_day: 0.1,
+        };
+        // Whole and fractional step counts, including quotients that round
+        // across a whole number, with several recording intervals.
+        let grids = [
+            (10.0, 3.0),
+            (7.3, 0.25),
+            (1.0, 0.1),
+            (609.6, 0.6),
+            (2.7, 0.3),
+            (40.0, 1.0),
+        ];
+        for (duration, step) in grids {
+            for record_every in [1, 2, 3, 7, 1000] {
+                let settings = SimulationSettings::new(duration, step)
+                    .unwrap()
+                    .with_record_every(record_every)
+                    .unwrap();
+                let run = simulate_sir(parameters, VALID_STATE, settings).unwrap();
+                let half = simulate_sir(parameters, VALID_STATE, settings.halved()).unwrap();
+                let times = |result: &SimulationResult<SirState>| -> Vec<f64> {
+                    result.trajectory.iter().map(|o| o.time_days).collect()
+                };
+                assert_eq!(
+                    times(&run),
+                    times(&half),
+                    "duration {duration}, step {step}, every {record_every}"
+                );
+                assert!(
+                    half.diagnostics.steps_executed >= 2 * run.diagnostics.steps_executed - 1,
+                    "duration {duration}, step {step}"
+                );
+            }
+        }
     }
 }

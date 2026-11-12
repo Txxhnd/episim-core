@@ -11,6 +11,10 @@
 //! [`SimulationResult`] holding the full trajectory, [`EpidemicMetrics`], and
 //! [`SimulationDiagnostics`], or a [`SimulationError`].
 //!
+//! A fixed-step solver does not report how accurate a run is. To estimate
+//! the error the timestep introduces, use [`estimate_sir_step_error`] or
+//! [`estimate_seir_step_error`].
+//!
 //! The models assume a closed, homogeneously mixing population, constant
 //! parameters, permanent immunity, and frequency-dependent transmission. The
 //! results describe the model under those assumptions; they are not
@@ -20,6 +24,7 @@
 #![warn(missing_docs)]
 #![deny(missing_debug_implementations)]
 
+mod accuracy;
 mod error;
 mod metrics;
 mod models;
@@ -29,10 +34,11 @@ mod simulation;
 mod solver;
 mod validation;
 
+pub use accuracy::StepErrorEstimate;
 pub use error::SimulationError;
 pub use metrics::EpidemicMetrics;
-pub use models::seir::{SeirParameters, SeirState, simulate_seir};
-pub use models::sir::{SirParameters, SirState, simulate_sir};
+pub use models::seir::{SeirParameters, SeirState, estimate_seir_step_error, simulate_seir};
+pub use models::sir::{SirParameters, SirState, estimate_sir_step_error, simulate_sir};
 pub use result::{Observation, SimulationDiagnostics, SimulationResult};
 pub use settings::SimulationSettings;
 
