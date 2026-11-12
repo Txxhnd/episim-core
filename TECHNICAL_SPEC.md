@@ -476,24 +476,30 @@ The implementation must detect cases where a timestep is too small to advance th
 
 ## 6.3 Timestep Stability Limit
 
-Classical RK4 is only conditionally stable. For a compartment that should decay at rate `r`, one step of size `h` multiplies it by:
+Classical RK4 is only conditionally stable. For a quantity that should decay at rate `r`, one step of size `h` multiplies it by:
 
 \[
 1-z+\frac{z^2}{2}-\frac{z^3}{6}+\frac{z^4}{24},\qquad z=rh
 \]
 
-This factor exceeds 1 once `z` is greater than about 2.785. The compartment then grows when it should decay, while remaining positive and conserving the total population, so the per-step diagnostics in Section 12 cannot detect it.
+This factor is 1/3 at `z = 2`, rises steeply after it, and exceeds 1 once `z` is greater than about 2.785. Past that point the quantity grows when it should decay, while remaining positive and conserving the total population, so the per-step diagnostics in Section 12 cannot detect it.
 
-Each rate bounds how fast one compartment can empty: beta for susceptible, sigma for exposed, and gamma for infected. The engine must therefore reject a configuration, before integration begins, when any of the following products exceeds 2.785:
+The engine must reject a configuration, before integration begins, when the model's fastest decay rate multiplied by the step exceeds 2:
 
-| Model | Checked products |
+| Model | Fastest decay rate |
 |---|---|
-| SIR | `beta_per_day * step_days`, `gamma_per_day * step_days` |
-| SEIR | `beta_per_day * step_days`, `sigma_per_day * step_days`, `gamma_per_day * step_days` |
+| SIR | `max(beta, gamma)` |
+| SEIR | `max(beta, (sigma + gamma) / 2 + sqrt(((sigma - gamma) / 2)^2 + sigma * beta))` |
 
-The error is `TimeStepTooLarge { parameter }`, naming the first rate that exceeds the limit in the order beta, sigma, gamma. A product exactly equal to 2.785 is accepted.
+Susceptibles empty at up to beta per day. In SEIR the exposed and infected compartments feed each other (progression moves exposed to infected, transmission creates exposed from infected), so the pair decays faster than sigma or gamma alone. The second SEIR term is the fast eigenvalue of that pair in a fully susceptible population, where the coupling is strongest. Checking each rate separately is not sufficient: with beta = 1.0, sigma = 0.25, gamma = 2.78, and a step of one day, every single product is below 2.785, yet the run reports a peak of 370 infected where the correct peak is the initial 100.
 
-This is a stability guard, not an accuracy guarantee. A timestep below the limit can still give inaccurate results, and the engine does not detect that. A run just below the limit may also be stopped by the diagnostics in Section 12.
+The step compared with the limit is the step actually taken, `min(step_days, duration_days)`. A product exactly equal to 2 is accepted.
+
+The error is `TimeStepTooLarge { max_step_days }`, where `max_step_days` is `2 / fastest rate`, the largest step accepted for the same parameters.
+
+The limit of 2 is an engineering choice supported by measurement, not a derived bound. In randomised comparisons against fine-step runs, no run within the limit moved a compartment in the wrong direction or missed the final incidence by more than 0.1, while runs between about 2.2 and the stability boundary at 2.785 did. The limit and the SEIR rate should be revisited if a counterexample is found.
+
+This is a stability guard, not an accuracy guarantee. A timestep within the limit can still give inaccurate results, and the engine does not detect that.
 
 ---
 
@@ -952,7 +958,7 @@ pub enum SimulationError {
     TimeStepTooSmall,
 
     TimeStepTooLarge {
-        parameter: &'static str,
+        max_step_days: f64,
     },
 
     NonFiniteNumericalState {
@@ -1090,7 +1096,7 @@ Testing must validate both mathematical correctness and software behavior.
 - Invalid timestep.
 - Invalid duration.
 - Maximum-step limit exceeded.
-- Timestep beyond the stability limit, for each rate parameter.
+- Timestep beyond the stability limit, for each rate parameter and for the coupled SEIR rate.
 
 ## 13.2 Integration Tests
 

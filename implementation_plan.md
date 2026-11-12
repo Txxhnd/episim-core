@@ -10,7 +10,7 @@
 
 **Spec:** `TECHNICAL_SPEC.md` in the repository root (implements Part II of `Product_Vision_&_MVP_Product_Requirements_Document.md`; product direction is in Part I of the same file).
 
-**Status:** Tasks 1 to 12 are implemented. Tasks 1 to 10 were reviewed as a whole by an independent reviewer; Tasks 11 and 12 came out of that review. Where the implementation departed from the task text, the Execution Notes section near the end records what was done and why.
+**Status:** Tasks 1 to 13 are implemented. Tasks 1 to 10 were reviewed as a whole by an independent reviewer, and Tasks 11 and 12 came out of that review. Tasks 11 and 12 were then reviewed in turn, which led to Task 13; Task 13 itself has not been independently reviewed. Where the implementation departed from the task text, the Execution Notes section near the end records what was done and why.
 
 ## Global Constraints
 
@@ -26,7 +26,7 @@
 - Default maximum number of integration steps is 1,000,000; explicit overrides must be supported.
 - Initial and accepted compartment values must be finite; input compartments must be non-negative.
 - Beta must be finite and non-negative; gamma and (for SEIR) sigma must be finite and strictly positive.
-- A timestep for which beta, sigma, or gamma multiplied by `step_days` exceeds 2.785 (the classical RK4 stability limit) must be rejected before integration with `TimeStepTooLarge { parameter }`.
+- A timestep for which the model's fastest decay rate multiplied by the step taken exceeds 2 must be rejected before integration with `TimeStepTooLarge { max_step_days }`. The fastest rate is `max(beta, gamma)` for SIR and `max(beta, (sigma + gamma) / 2 + sqrt(((sigma - gamma) / 2)^2 + sigma * beta))` for SEIR (specification section 6.3).
 - Materially negative numerical states, non-finite intermediate values, or population conservation drift above the specified tolerance must return typed errors; do not silently clip values.
 - Relative population drift target is `1e-9`; tolerated negative roundoff uses `64 * f64::EPSILON * max(N0, 1)` and must be counted in diagnostics.
 - Results contain the initial observation, each accepted step, and the final observation.
@@ -645,6 +645,8 @@ git commit -m "docs: prepare episim-core v0.1.0 release"
 
 ## Task 11: Reject Timesteps Beyond the RK4 Stability Limit
 
+> **Superseded in part by Task 13.** A review found that checking each rate separately against 2.785 does not prevent instability in SEIR. Task 13 replaced the rule, the limit, and the shape of the error variant. The text below is kept as the record of what Task 11 did.
+
 Added after the final review of Tasks 1 to 10. The review found that a step too large for a rate can return `Ok` with a wrong trajectory: with beta = 0, gamma = 3, and a step of one day, the infected compartment grows by 37.5% per step, stays positive, and conserves the population. The same happens for susceptibles when `beta * step_days` is about 3 and nearly everyone is infected. See Section 6.3 of the technical specification.
 
 **Files:**
@@ -710,6 +712,8 @@ The final review of Tasks 1 to 10 left a list of minor findings. This task close
 - Modify: `tests/numerical_tests.rs`
 - Create: `CHANGELOG.md`
 - Modify: `Cargo.toml`
+- Modify: `docs/api_design.md`
+- Modify: `implementation_plan.md`
 
 **Interfaces:**
 - `SimulationError` becomes `#[non_exhaustive]`, matching the documented promise that it may gain variants.
@@ -757,6 +761,57 @@ git add src tests docs CHANGELOG.md Cargo.toml implementation_plan.md
 git commit -m "test: harden error paths and boundaries for release"
 ```
 
+## Task 13: Correct the Stability Guard After Review
+
+An independent review of Tasks 11 and 12 found that the Task 11 guard does not do its job for SEIR. Exposed and infected feed each other, so together they decay faster than sigma or gamma alone, and a run could pass the per-rate check and still return `Ok` with the infected growing where the model says they must decline (beta = 1.0, sigma = 0.25, gamma = 2.78, step 1: reported peak 370, correct peak 100). The review also noted that a limit of 2.785 sits where RK4 no longer damps at all.
+
+**Files:**
+- Modify: `src/error.rs`
+- Modify: `src/validation.rs`
+- Modify: `src/models/sir.rs`
+- Modify: `src/models/seir.rs`
+- Modify: `src/simulation/driver.rs`
+- Modify: `tests/sir_tests.rs`
+- Modify: `tests/seir_tests.rs`
+- Modify: `README.md`, `CHANGELOG.md`, `docs/numerical_methods.md`, `docs/api_design.md`
+- Modify: `TECHNICAL_SPEC.md`, `Product_Vision_&_MVP_Product_Requirements_Document.md`, `implementation_plan.md`
+
+**Interfaces:**
+- The error variant becomes `TimeStepTooLarge { max_step_days: f64 }`: the largest step accepted for the same parameters. A combined rate has no single parameter to name.
+- Internal `stable_step(step_days: f64, fastest_rate_per_day: f64) -> Result<(), SimulationError>`, rejecting a product above `2.0`.
+- `simulate_sir` passes `max(beta, gamma)`; `simulate_seir` passes `max(beta, (sigma + gamma) / 2 + sqrt(((sigma - gamma) / 2)^2 + sigma * beta))`. Both pass `min(step_days, duration_days)` as the step.
+
+- [x] **Step 1: Write failing tests**
+
+Replace the two Task 11 tests and add:
+- `sir_rejects_step_too_large_for_stable_integration` and `seir_rejects_step_too_large_for_stable_integration`: each rate at 4 per day with a step of one day returns `TimeStepTooLarge { max_step_days: 0.5 }`, and the same rate runs with a step of 0.5. In SIR, a product of exactly 2 is accepted and one step leaves one third of the infected; 2.01 is rejected.
+- `seir_rejects_step_too_large_for_the_coupled_exposed_and_infected_rate`: with all three rates at 1.5 and a step of one day, every single product is 1.5 but the run is rejected with `max_step_days` of 2/3; with all rates at 1 the coupled product is exactly 2 and the guard does not fire.
+- `seir_rejects_subcritical_outbreak_that_a_coarse_step_would_inflate`: the review's input is rejected, and with a step of 0.5 the infected never exceed their initial value.
+- `sir_stability_check_uses_the_step_actually_taken` and `seir_stability_check_uses_the_step_actually_taken`: a duration of one day with a nominal step of seven days is judged on the one-day step.
+
+Tighten `driver_applies_drift_threshold_near_its_boundary` to 0.99e-9 and 1.01e-9.
+
+- [x] **Step 2: Run tests to verify failure**
+
+Run: `cargo test --no-fail-fast`
+Expected: the six stability tests FAIL against the Task 11 guard.
+
+- [x] **Step 3: Implement**
+
+Change the variant, `stable_step`, and both call sites. Correct every statement about the guard in the README, changelog, docs, specification section 6.3, the product requirements, and this plan.
+
+- [x] **Step 4: Verify**
+
+Run the full quality checks from Task 12 Step 4. Then confirm the guard empirically: in a scratch crate outside the repository, run random configurations of both models against runs at 1/64 of the step and count accepted runs in which a compartment moves in the wrong direction or the final incidence is off by more than 0.1.
+Expected: all checks pass, and the count is zero. Measured: 226,590 accepted SIR runs and 107,633 accepted SEIR runs out of 250,000 configurations each, none flagged. Before the fix the same measure found such runs from a product of about 2.2 (SEIR) and 2.4 (SIR).
+
+- [x] **Step 5: Commit**
+
+```bash
+git add src tests docs README.md CHANGELOG.md TECHNICAL_SPEC.md "Product_Vision_&_MVP_Product_Requirements_Document.md" implementation_plan.md
+git commit -m "fix: guard the fastest coupled rate and lower the stability limit"
+```
+
 ---
 
 ## Execution Notes
@@ -796,6 +851,7 @@ These record where the implementation of Tasks 1 to 11 departed from the task te
 - Package verification: Task 10.
 - Timestep stability guard: Task 11.
 - Error-path, boundary, and release-note hardening: Task 12.
+- Corrected stability guard (coupled SEIR rate, limit of 2): Task 13.
 
 ### Type consistency
 

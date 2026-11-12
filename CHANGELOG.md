@@ -26,8 +26,9 @@ The first version. It has not been published yet.
   invalid initial states, unusable settings, numerical failures, resource
   limits, and non-finite metrics.
 - Input checks before integration: parameter ranges, a finite and positive
-  initial population, a timestep within the solver's stability limit (any
-  rate times the step at most 2.785), and a finite `beta / gamma`.
+  initial population, a timestep small enough for stable integration (the
+  model's fastest decay rate times the step at most 2), and a finite
+  `beta / gamma`.
 - Checks after every step: finite values, no materially negative
   compartment, and relative population drift of at most `1e-9`. Values are
   never clipped.

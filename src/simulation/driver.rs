@@ -389,10 +389,10 @@ mod tests {
     #[test]
     fn driver_applies_drift_threshold_near_its_boundary() {
         // In a population of 1000 a relative drift of 1e-9 is 1e-6 individuals.
-        for accepted in [1000.0 + 0.9e-6, 1000.0 - 0.9e-6] {
+        for accepted in [1000.0 + 0.99e-6, 1000.0 - 0.99e-6] {
             assert_eq!(check([accepted, 0.0], 1000.0), Ok(0), "total {accepted}");
         }
-        for rejected in [1000.0 + 1.1e-6, 1000.0 - 1.1e-6] {
+        for rejected in [1000.0 + 1.01e-6, 1000.0 - 1.01e-6] {
             assert_eq!(
                 check([rejected, 0.0], 1000.0),
                 Err(SimulationError::PopulationConservationViolation),

@@ -61,7 +61,7 @@ pub fn simulate_seir(
 
 | Group | Variants | When |
 |---|---|---|
-| Invalid configuration | `InvalidParameter { name }`, `InvalidDuration`, `InvalidTimeStep`, `InvalidMaximumSteps`, `TimeStepTooLarge { parameter }` | A rate, duration, timestep, or step limit is outside its valid range, or the timestep is too large for stable integration with the named rate (rate times step above 2.785). `name` and `parameter` are field names, for example `"gamma_per_day"`. |
+| Invalid configuration | `InvalidParameter { name }`, `InvalidDuration`, `InvalidTimeStep`, `InvalidMaximumSteps`, `TimeStepTooLarge { max_step_days }` | A rate, duration, timestep, or step limit is outside its valid range, or the timestep is too large for stable integration (the model's fastest decay rate times the step is above 2; `max_step_days` is the largest step that would be accepted). `name` is the field name, for example `"gamma_per_day"`. |
 | Invalid initial population | `InvalidInitialState { compartment }`, `InvalidPopulation` | A compartment is negative or not finite, or the total is zero or not finite. |
 | Numerical instability | `NonFiniteIntermediate { stage }`, `NonFiniteNumericalState { compartment }`, `NegativeCompartment { compartment }`, `PopulationConservationViolation` | The integration produced a value the library will not accept. |
 | Resource limits | `StepLimitExceeded`, `TimeStepTooSmall`, `AllocationFailure` | The run needs more steps than allowed, a step too small for `f64` time, or more memory than could be reserved. |

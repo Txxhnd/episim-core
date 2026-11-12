@@ -215,34 +215,55 @@ fn sir_first_step_matches_model_equations() {
 
 #[test]
 fn sir_rejects_step_too_large_for_stable_integration() {
-    // RK4 turns decay into growth once a rate times the step exceeds about
-    // 2.785, without any negative value or drift to give it away.
-    let run = |beta_per_day, gamma_per_day, step| {
+    // The fastest rate times the step may be at most 2. Beyond that RK4
+    // damps too weakly, or not at all, and nothing else would notice.
+    let run = |beta_per_day, gamma_per_day, duration, step| {
         let parameters = SirParameters {
             beta_per_day,
             gamma_per_day,
         };
-        simulate_sir(parameters, INITIAL, settings(10.0, step))
+        simulate_sir(parameters, INITIAL, settings(duration, step))
     };
+    // A rate of 4 per day allows a step of at most 2 / 4 = 0.5 days.
+    let too_large = SimulationError::TimeStepTooLarge { max_step_days: 0.5 };
 
-    assert_eq!(
-        run(0.0, 2.786, 1.0).unwrap_err(),
-        SimulationError::TimeStepTooLarge {
-            parameter: "gamma_per_day"
-        }
-    );
-    assert_eq!(
-        run(2.786, 0.1, 1.0).unwrap_err(),
-        SimulationError::TimeStepTooLarge {
-            parameter: "beta_per_day"
-        }
-    );
+    assert_eq!(run(0.0, 4.0, 10.0, 1.0).unwrap_err(), too_large);
+    assert_eq!(run(4.0, 0.1, 10.0, 1.0).unwrap_err(), too_large);
+    // The step named in the error is accepted, for either rate.
+    assert!(run(0.0, 4.0, 10.0, 0.5).is_ok());
+    assert!(run(4.0, 0.1, 10.0, 0.5).is_ok());
 
-    // Exactly at the limit the run is accepted and the infected still decay.
-    let at_limit = run(0.0, 2.785, 1.0).unwrap();
-    assert!(at_limit.trajectory[10].state.infected < INITIAL.infected);
-    // The same rate is fine with a smaller step.
-    assert!(run(0.0, 2.786, 0.5).is_ok());
+    // Exactly at the limit the run is accepted, and pure recovery still
+    // removes two thirds of the infected per step (RK4's factor at 2 is 1/3).
+    let at_limit = run(0.0, 2.0, 10.0, 1.0).unwrap();
+    let after_one_step = at_limit.trajectory[1].state.infected;
+    assert!((after_one_step - INITIAL.infected / 3.0).abs() < 1e-9);
+    assert!(matches!(
+        run(0.0, 2.01, 10.0, 1.0),
+        Err(SimulationError::TimeStepTooLarge { .. })
+    ));
+}
+
+#[test]
+fn sir_stability_check_uses_the_step_actually_taken() {
+    // A duration shorter than the step is integrated in one step of that
+    // duration, so the nominal step of 7 days is never used.
+    let parameters = SirParameters {
+        beta_per_day: 0.3,
+        gamma_per_day: 0.5,
+    };
+    let result = simulate_sir(parameters, INITIAL, settings(1.0, 7.0)).unwrap();
+    assert_eq!(result.diagnostics.steps_executed, 1);
+
+    // The single step of 1 day is still too large for a rate of 4 per day.
+    let fast = SirParameters {
+        beta_per_day: 0.0,
+        gamma_per_day: 4.0,
+    };
+    assert_eq!(
+        simulate_sir(fast, INITIAL, settings(1.0, 7.0)).unwrap_err(),
+        SimulationError::TimeStepTooLarge { max_step_days: 0.5 }
+    );
 }
 
 #[test]

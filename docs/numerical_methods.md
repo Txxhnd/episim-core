@@ -94,22 +94,44 @@ checks, in this order.
 - RK4 is an explicit method. If the step is large compared with the fastest
   time scale (`1 / beta`, `1 / sigma`, or `1 / gamma`), the solution becomes
   inaccurate and, past a limit, unstable.
-- **Instability is rejected up front.** For a compartment that should decay
-  at rate `r`, RK4 multiplies it each step by
-  `1 - z + z^2/2 - z^3/6 + z^4/24` with `z = r * step`. That factor exceeds 1
-  once `z` is above about 2.785, so the compartment grows when it should
-  shrink, while staying positive and conserving the population. The per-step
-  checks cannot see that: with `beta = 0`, `gamma = 3`, and a step of one
-  day the infected compartment would grow by 37.5% per step. Each rate
-  bounds how fast one compartment empties (`beta` for susceptible, `sigma`
-  for exposed, `gamma` for infected), so a run is rejected with
-  `TimeStepTooLarge { parameter }` before integration if `beta * step`,
-  `sigma * step`, or `gamma * step` exceeds 2.785.
-- **Inaccuracy is not detected.** The limit above is a stability limit, not
-  an accuracy target. Just below it a run may still fail on a negative
-  compartment, or succeed with large errors: at `gamma * step = 2` the
-  infected compartment falls to 33% per step where the exact value is 14%.
-  Keep every rate times the step well below 1.
+- **Steps that are too large are rejected up front.** For a compartment
+  that should decay at rate `r`, RK4 multiplies it each step by
+  `1 - z + z^2/2 - z^3/6 + z^4/24` with `z = r * step`. That factor is 1/3 at
+  `z = 2`, rises steeply after it, and exceeds 1 once `z` is above about
+  2.785. Past that point the compartment grows when it should shrink, while
+  staying positive and conserving the population, so the per-step checks
+  cannot see it: with `beta = 0`, `gamma = 3`, and a step of one day the
+  infected compartment would grow by 37.5% per step.
+
+  A run is therefore rejected with `TimeStepTooLarge { max_step_days }`
+  before integration if the model's fastest decay rate times the step
+  exceeds 2. `max_step_days` is the largest step accepted for the same
+  parameters, `2 / fastest rate`. The fastest rate is:
+
+  | Model | Fastest decay rate |
+  |---|---|
+  | SIR | `max(beta, gamma)` |
+  | SEIR | `max(beta, (sigma + gamma) / 2 + sqrt(((sigma - gamma) / 2)^2 + sigma * beta))` |
+
+  Susceptibles empty at up to `beta` per day. In SEIR the exposed and
+  infected compartments feed each other, so together they decay faster than
+  `sigma` or `gamma` alone; the second SEIR term is the fast rate of that
+  pair in a fully susceptible population. With `beta = 0` it reduces to
+  `max(sigma, gamma)`, and with `beta = sigma = gamma` it is twice the rate.
+  The step compared with the limit is the step actually taken: a duration
+  shorter than the timestep is integrated in one step of that duration.
+
+  The limit of 2 was chosen from measurements, not derived. In 250,000
+  random configurations per model, compared with runs at 1/64 of the step,
+  no accepted run moved a compartment in the wrong direction or missed the
+  final incidence by more than 0.1 (226,590 accepted SIR runs and 107,633
+  accepted SEIR runs). With a limit at the stability boundary of 2.785 such
+  runs do occur, from a product of about 2.2. This is evidence, not a proof
+  that every accepted run is qualitatively right.
+- **Inaccuracy is not detected.** The limit is a stability guard, not an
+  accuracy target. At the limit a run still has large errors: with
+  `gamma * step = 2` the infected compartment falls to 33% per step where
+  the exact value is 14%. Keep every rate times the step well below 1.
 - Positivity is not enforced by the method.
 - Peak metrics are taken from recorded observations, so the peak time is
   resolved only to the nearest step.

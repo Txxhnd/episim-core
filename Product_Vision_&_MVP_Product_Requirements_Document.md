@@ -366,7 +366,7 @@ Requirements:
 
 - Duration must be finite and greater than zero.
 - Time step must be finite and greater than zero.
-- Time step must not exceed the solver's stability limit: β, γ, or (for SEIR) σ multiplied by the time step must not exceed 2.785.
+- Time step must not be too large for stable integration: the model's fastest decay rate multiplied by the time step must not exceed 2. The technical specification defines the fastest rate for each model.
 - The final integration step must be shortened when necessary to reach the requested duration.
 - The initial state and final state must both appear in the resulting trajectory.
 

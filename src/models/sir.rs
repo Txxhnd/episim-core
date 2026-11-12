@@ -65,8 +65,8 @@ impl SirState {
 /// # Errors
 ///
 /// Returns a [`SimulationError`] if a parameter or the initial state is
-/// invalid, if the timestep is too large for stable integration with one of
-/// the rates, if the settings require more steps than their limit or a
+/// invalid, if the timestep is too large for stable integration with these
+/// rates, if the settings require more steps than their limit or a
 /// timestep too small to advance the clock, if the integration produces a
 /// non-finite value, a materially negative compartment, or excessive
 /// population drift, if a metric is not finite, or if the trajectory cannot
@@ -98,12 +98,12 @@ pub fn simulate_sir(
         beta_per_day,
         gamma_per_day,
     } = parameters;
+    // Susceptibles empty at up to beta per day and infected at gamma per
+    // day; no state of the model decays faster than the larger of the two.
+    // A duration shorter than the step is integrated in one shorter step.
     validation::stable_step(
-        settings.step_days(),
-        &[
-            ("beta_per_day", beta_per_day),
-            ("gamma_per_day", gamma_per_day),
-        ],
+        settings.step_days().min(settings.duration_days()),
+        beta_per_day.max(gamma_per_day),
     )?;
     // Checked now so that an unusable R0 is reported before any integration.
     basic_reproduction_number(beta_per_day, gamma_per_day)?;

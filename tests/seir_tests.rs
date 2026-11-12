@@ -235,8 +235,8 @@ fn seir_first_step_matches_model_equations() {
 
 #[test]
 fn seir_rejects_step_too_large_for_stable_integration() {
-    // RK4 turns decay into growth once a rate times the step exceeds about
-    // 2.785, without any negative value or drift to give it away.
+    // The fastest rate times the step may be at most 2. Beyond that RK4
+    // damps too weakly, or not at all, and nothing else would notice.
     let run = |beta_per_day, sigma_per_day, gamma_per_day, step| {
         let parameters = SeirParameters {
             beta_per_day,
@@ -245,32 +245,81 @@ fn seir_rejects_step_too_large_for_stable_integration() {
         };
         simulate_seir(parameters, INITIAL, settings(10.0, step))
     };
-    let too_large = |parameter| SimulationError::TimeStepTooLarge { parameter };
+    let too_large = |max_step_days| SimulationError::TimeStepTooLarge { max_step_days };
 
-    assert_eq!(
-        run(2.786, 0.2, 0.1, 1.0).unwrap_err(),
-        too_large("beta_per_day")
-    );
-    assert_eq!(
-        run(0.0, 2.786, 0.1, 1.0).unwrap_err(),
-        too_large("sigma_per_day")
-    );
-    assert_eq!(
-        run(0.0, 0.2, 2.786, 1.0).unwrap_err(),
-        too_large("gamma_per_day")
-    );
+    // Without transmission the fastest rate is the larger of sigma and gamma.
+    assert_eq!(run(0.0, 4.0, 0.1, 1.0).unwrap_err(), too_large(0.5));
+    assert_eq!(run(0.0, 0.2, 4.0, 1.0).unwrap_err(), too_large(0.5));
+    // Susceptibles can empty at up to beta per day.
+    assert_eq!(run(4.0, 0.2, 0.1, 1.0).unwrap_err(), too_large(0.5));
+    // The step named in the error is accepted.
+    assert!(run(0.0, 4.0, 0.1, 0.5).is_ok());
+    assert!(run(0.0, 0.2, 4.0, 0.5).is_ok());
+}
 
-    // Exactly at the limit this guard does not fire. The run is still too
-    // coarse to succeed: the per-step checks stop it when a compartment goes
-    // negative, so it fails with an error and not with a wrong trajectory.
+#[test]
+fn seir_rejects_step_too_large_for_the_coupled_exposed_and_infected_rate() {
+    // Exposed and infected feed each other, so together they decay faster
+    // than sigma or gamma alone. With sigma = gamma = g the fastest rate is
+    // g + sqrt(g * beta).
+    let run = |rate, step| {
+        let parameters = SeirParameters {
+            beta_per_day: rate,
+            sigma_per_day: rate,
+            gamma_per_day: rate,
+        };
+        simulate_seir(parameters, INITIAL, settings(10.0, step))
+    };
+
+    // Every rate times the step is 1.5, but the coupled rate is 3 per day.
     assert_eq!(
-        run(0.0, 2.785, 0.1, 1.0).unwrap_err(),
-        SimulationError::NegativeCompartment {
-            compartment: "infected"
+        run(1.5, 1.0).unwrap_err(),
+        SimulationError::TimeStepTooLarge {
+            max_step_days: 2.0 / 3.0
         }
     );
-    // The same rate is fine with a smaller step.
-    assert!(run(0.0, 2.786, 0.1, 0.5).is_ok());
+    assert!(run(1.5, 0.5).is_ok());
+    // With all rates 1 the coupled rate is exactly 2: at the limit, not over it.
+    assert!(!matches!(
+        run(1.0, 1.0),
+        Err(SimulationError::TimeStepTooLarge { .. })
+    ));
+}
+
+#[test]
+fn seir_rejects_subcritical_outbreak_that_a_coarse_step_would_inflate() {
+    // R0 = beta / gamma = 0.36, so the infected can only decline. With a
+    // step of one day every single rate looks acceptable, yet the coupled
+    // rate is about 2.88 per day; unguarded, RK4 reports a peak of 370
+    // infected and 80% of the population infected.
+    let parameters = SeirParameters {
+        beta_per_day: 1.0,
+        sigma_per_day: 0.25,
+        gamma_per_day: 2.78,
+    };
+    let initial = SeirState {
+        susceptible: 800.0,
+        exposed: 100.0,
+        infected: 100.0,
+        recovered: 0.0,
+    };
+    assert!(matches!(
+        simulate_seir(parameters, initial, settings(100.0, 1.0)),
+        Err(SimulationError::TimeStepTooLarge { .. })
+    ));
+
+    // With a step the guard accepts, the infected never exceed their start.
+    let result = simulate_seir(parameters, initial, settings(100.0, 0.5)).unwrap();
+    assert_eq!(result.metrics.peak_infectious, 100.0);
+    assert_eq!(result.metrics.peak_infectious_time_days, 0.0);
+}
+
+#[test]
+fn seir_stability_check_uses_the_step_actually_taken() {
+    // A duration shorter than the step is integrated in one step of that
+    // duration, so the nominal step of 7 days is never used.
+    let result = simulate_seir(PARAMETERS, INITIAL, settings(1.0, 7.0)).unwrap();
+    assert_eq!(result.diagnostics.steps_executed, 1);
 }
 
 #[test]
