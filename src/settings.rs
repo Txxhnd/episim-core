@@ -1,0 +1,63 @@
+use crate::error::SimulationError;
+
+const DEFAULT_MAX_STEPS: usize = 1_000_000;
+
+/// Validated simulation duration, fixed timestep, and integration step limit.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SimulationSettings {
+    duration_days: f64,
+    step_days: f64,
+    max_steps: usize,
+}
+
+impl SimulationSettings {
+    /// Creates settings with a duration and fixed timestep, both in days.
+    ///
+    /// The maximum number of integration steps defaults to 1,000,000.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SimulationError::InvalidDuration`] or
+    /// [`SimulationError::InvalidTimeStep`] if the corresponding value is not
+    /// finite and strictly positive.
+    pub fn new(duration_days: f64, step_days: f64) -> Result<Self, SimulationError> {
+        if !(duration_days.is_finite() && duration_days > 0.0) {
+            return Err(SimulationError::InvalidDuration);
+        }
+        if !(step_days.is_finite() && step_days > 0.0) {
+            return Err(SimulationError::InvalidTimeStep);
+        }
+        Ok(Self {
+            duration_days,
+            step_days,
+            max_steps: DEFAULT_MAX_STEPS,
+        })
+    }
+
+    /// Replaces the maximum number of integration steps.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SimulationError::InvalidMaximumSteps`] if `max_steps` is zero.
+    pub fn with_max_steps(self, max_steps: usize) -> Result<Self, SimulationError> {
+        if max_steps == 0 {
+            return Err(SimulationError::InvalidMaximumSteps);
+        }
+        Ok(Self { max_steps, ..self })
+    }
+
+    /// Total simulation duration in days.
+    pub fn duration_days(&self) -> f64 {
+        self.duration_days
+    }
+
+    /// Fixed integration timestep in days.
+    pub fn step_days(&self) -> f64 {
+        self.step_days
+    }
+
+    /// Maximum number of integration steps a simulation may execute.
+    pub fn max_steps(&self) -> usize {
+        self.max_steps
+    }
+}
