@@ -11,6 +11,8 @@ mod error;
 mod models;
 mod settings;
 #[cfg_attr(not(test), expect(dead_code))]
+mod solver;
+#[cfg_attr(not(test), expect(dead_code))]
 mod validation;
 
 pub use error::SimulationError;
