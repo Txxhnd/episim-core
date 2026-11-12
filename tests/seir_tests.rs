@@ -1,0 +1,190 @@
+use episim_core::{
+    Observation, SeirParameters, SeirState, SimulationError, SimulationSettings, simulate_seir,
+};
+
+const PARAMETERS: SeirParameters = SeirParameters {
+    beta_per_day: 0.5,
+    sigma_per_day: 0.2,
+    gamma_per_day: 0.1,
+};
+
+const INITIAL: SeirState = SeirState {
+    susceptible: 980.0,
+    exposed: 10.0,
+    infected: 10.0,
+    recovered: 0.0,
+};
+
+fn settings(duration_days: f64, step_days: f64) -> SimulationSettings {
+    SimulationSettings::new(duration_days, step_days).unwrap()
+}
+
+#[test]
+fn seir_returns_initial_and_final_observations() {
+    let result = simulate_seir(PARAMETERS, INITIAL, settings(10.0, 3.0)).unwrap();
+
+    assert_eq!(result.trajectory.len(), 5);
+    assert_eq!(
+        result.trajectory[0],
+        Observation {
+            time_days: 0.0,
+            state: INITIAL
+        }
+    );
+    let last = result.trajectory[4];
+    assert_eq!(last.time_days, 10.0);
+    // With beta > gamma the epidemic grows: susceptibles fall, recoveries accumulate.
+    assert!(last.state.susceptible < INITIAL.susceptible);
+    assert!(last.state.recovered > INITIAL.recovered);
+    assert_eq!(result.diagnostics.steps_executed, 4);
+    assert_eq!(result.metrics.basic_reproduction_number, 5.0);
+}
+
+#[test]
+fn seir_zero_transmission_keeps_susceptible_constant() {
+    let parameters = SeirParameters {
+        beta_per_day: 0.0,
+        ..PARAMETERS
+    };
+    let result = simulate_seir(parameters, INITIAL, settings(30.0, 0.5)).unwrap();
+
+    for observation in &result.trajectory {
+        assert_eq!(observation.state.susceptible, INITIAL.susceptible);
+    }
+    assert_eq!(result.metrics.basic_reproduction_number, 0.0);
+    assert_eq!(result.metrics.cumulative_infections_since_start, 0.0);
+}
+
+#[test]
+fn seir_zero_exposed_and_infected_has_no_new_infections() {
+    let initial = SeirState {
+        susceptible: 1000.0,
+        exposed: 0.0,
+        infected: 0.0,
+        recovered: 0.0,
+    };
+    let result = simulate_seir(PARAMETERS, initial, settings(30.0, 0.5)).unwrap();
+
+    for observation in &result.trajectory {
+        assert_eq!(observation.state, initial);
+    }
+    assert_eq!(result.metrics.cumulative_infections_since_start, 0.0);
+    assert_eq!(result.metrics.peak_infectious, 0.0);
+    assert_eq!(result.metrics.peak_infectious_time_days, 0.0);
+}
+
+#[test]
+fn seir_beta_zero_matches_analytical_exposed_and_infected_solution() {
+    let parameters = SeirParameters {
+        beta_per_day: 0.0,
+        sigma_per_day: 0.2,
+        gamma_per_day: 0.1,
+    };
+    let initial = SeirState {
+        susceptible: 850.0,
+        exposed: 50.0,
+        infected: 100.0,
+        recovered: 0.0,
+    };
+    let result = simulate_seir(parameters, initial, settings(30.0, 0.25)).unwrap();
+
+    let (sigma, gamma) = (parameters.sigma_per_day, parameters.gamma_per_day);
+    // RK4's global error with sigma * h = 0.05 stays near 1e-6 individuals
+    // here; 1e-5 leaves roughly a tenfold margin.
+    let tolerance = 1e-5;
+    for observation in &result.trajectory {
+        let time = observation.time_days;
+        let exposed = initial.exposed * (-sigma * time).exp();
+        let infected = initial.infected * (-gamma * time).exp()
+            + sigma * initial.exposed / (gamma - sigma)
+                * ((-sigma * time).exp() - (-gamma * time).exp());
+        let state = observation.state;
+        assert_eq!(state.susceptible, initial.susceptible);
+        assert!(
+            (state.exposed - exposed).abs() < tolerance,
+            "exposed at day {time}: {} vs {exposed}",
+            state.exposed
+        );
+        assert!(
+            (state.infected - infected).abs() < tolerance,
+            "infected at day {time}: {} vs {infected}",
+            state.infected
+        );
+    }
+}
+
+#[test]
+fn seir_preserves_total_population_within_tolerance() {
+    let result = simulate_seir(PARAMETERS, INITIAL, settings(160.0, 0.25)).unwrap();
+
+    for observation in &result.trajectory {
+        let state = observation.state;
+        let total = state.susceptible + state.exposed + state.infected + state.recovered;
+        assert!(
+            ((total - 1000.0) / 1000.0).abs() <= 1e-9,
+            "total {total} at day {}",
+            observation.time_days
+        );
+    }
+    assert!(result.diagnostics.maximum_relative_population_drift <= 1e-9);
+}
+
+#[test]
+fn seir_returns_error_for_invalid_parameters_and_state() {
+    let run = |parameters, initial| simulate_seir(parameters, initial, settings(10.0, 1.0));
+
+    let negative_beta = SeirParameters {
+        beta_per_day: -0.5,
+        ..PARAMETERS
+    };
+    assert_eq!(
+        run(negative_beta, INITIAL).unwrap_err(),
+        SimulationError::InvalidParameter {
+            name: "beta_per_day"
+        }
+    );
+
+    let zero_sigma = SeirParameters {
+        sigma_per_day: 0.0,
+        ..PARAMETERS
+    };
+    assert_eq!(
+        run(zero_sigma, INITIAL).unwrap_err(),
+        SimulationError::InvalidParameter {
+            name: "sigma_per_day"
+        }
+    );
+
+    let zero_gamma = SeirParameters {
+        gamma_per_day: 0.0,
+        ..PARAMETERS
+    };
+    assert_eq!(
+        run(zero_gamma, INITIAL).unwrap_err(),
+        SimulationError::InvalidParameter {
+            name: "gamma_per_day"
+        }
+    );
+
+    let negative_exposed = SeirState {
+        exposed: -10.0,
+        ..INITIAL
+    };
+    assert_eq!(
+        run(PARAMETERS, negative_exposed).unwrap_err(),
+        SimulationError::InvalidInitialState {
+            compartment: "exposed"
+        }
+    );
+
+    let empty = SeirState {
+        susceptible: 0.0,
+        exposed: 0.0,
+        infected: 0.0,
+        recovered: 0.0,
+    };
+    assert_eq!(
+        run(PARAMETERS, empty).unwrap_err(),
+        SimulationError::InvalidPopulation
+    );
+}

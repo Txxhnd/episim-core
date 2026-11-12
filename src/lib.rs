@@ -6,9 +6,6 @@
 
 mod error;
 mod metrics;
-// The SEIR validators have no caller until `simulate_seir` exists; `expect`
-// starts warning once they do, so this attribute cannot outlive its reason.
-#[cfg_attr(not(test), expect(dead_code))]
 mod models;
 mod result;
 mod settings;
@@ -18,7 +15,7 @@ mod validation;
 
 pub use error::SimulationError;
 pub use metrics::EpidemicMetrics;
-pub use models::seir::{SeirParameters, SeirState};
+pub use models::seir::{SeirParameters, SeirState, simulate_seir};
 pub use models::sir::{SirParameters, SirState, simulate_sir};
 pub use result::{Observation, SimulationDiagnostics, SimulationResult};
 pub use settings::SimulationSettings;
