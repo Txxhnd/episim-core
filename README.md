@@ -180,3 +180,7 @@ cargo test --doc
 cargo doc --no-deps --all-features
 cargo bench
 ```
+
+## License
+
+Licensed under the [MIT License](LICENSE).
