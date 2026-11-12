@@ -75,11 +75,32 @@ cargo run --example basic_seir
 | Field | Contents |
 |---|---|
 | `trajectory` | One `Observation` (time in days plus the model state) for day zero and for every recorded integration step: every step by default, or every N-th step with `SimulationSettings::with_record_every`. The last one is always the final state, exactly at the requested duration. |
-| `metrics` | Basic reproduction number `R0 = beta / gamma`, peak infectious population and the day it is first reached, new infections since the start `S(0) - S(T)`, and that number as a fraction of the initial population. |
+| `metrics` | Basic reproduction number `R0 = beta / gamma` and the herd-immunity threshold `1 - 1/R0`, peak infectious population and the day it is first reached, new infections since the start `S(0) - S(T)` and that number as a fraction of the initial population, and the fraction the model infects by the time the epidemic is over (its final size). |
 | `diagnostics` | Steps executed, the largest absolute and relative population drift, and how many recorded values were negative within roundoff tolerance. |
 
 Peak metrics are read from the recorded observations, so their time
 resolution is the recording interval, which is the timestep by default.
+
+The effective reproduction number at any point of a run, `R0 * S / N`, comes
+from the parameters:
+
+```rust
+use episim_core::{SimulationError, SimulationSettings, SirParameters, SirState, simulate_sir};
+
+let parameters = SirParameters { beta_per_day: 0.3, gamma_per_day: 0.1 };
+let initial_state = SirState { susceptible: 990.0, infected: 10.0, recovered: 0.0 };
+let result = simulate_sir(parameters, initial_state, SimulationSettings::new(160.0, 0.25)?)?;
+
+for observation in result.trajectory.iter().step_by(40) {
+    let effective_r = parameters.effective_reproduction_number(&observation.state)?;
+    println!("day {:>3}: effective R = {effective_r:.2}", observation.time_days);
+}
+# Ok::<(), SimulationError>(())
+```
+
+All of these are properties of the model. They are not estimates from case
+data: in particular, the model's effective R is not the `Rt` that
+public-health agencies estimate from surveillance.
 
 ## Model assumptions
 
@@ -102,7 +123,7 @@ is not the clinical incubation period.
 Version 0.1.0 contains the SIR and SEIR models and one solver. It has no
 command-line interface, serialization, stochastic or agent-based models, age
 structure, interventions, time-varying parameters, parameter fitting, or
-effective reproduction number (`Rt`).
+estimation of `Rt` from case data.
 
 The solver uses a fixed step and has no error control. Choose a step that is
 small compared with `1 / beta`, `1 / sigma`, and `1 / gamma`. A run is

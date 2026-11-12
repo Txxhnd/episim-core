@@ -17,6 +17,7 @@ private.
 | `SimulationResult<S>` | struct | Trajectory, metrics, and diagnostics. |
 | `Observation<S>` | struct | A time in days and the state at that time. |
 | `EpidemicMetrics` | struct | Model-derived summary metrics. |
+| `SirParameters::effective_reproduction_number`, `SeirParameters::effective_reproduction_number` | method | Model-derived effective reproduction number `R0 * S / N` in a given state. |
 | `SimulationDiagnostics` | struct | Step count, population drift, tolerated negative values. |
 | `StepErrorEstimate` | struct | Estimated largest absolute and relative error of a run. |
 | `SimulationError` | enum | Every failure the library can report. |
@@ -96,5 +97,5 @@ This is a 0.1 release. The public API may still change before 1.0.
 `SimulationError` is marked `#[non_exhaustive]`: it may gain variants, so
 the compiler requires a wildcard arm when you match on it.
 
-Not part of the API in this version: an effective reproduction number
-(`Rt`), serialization, and user-defined models.
+Not part of the API in this version: estimation of `Rt` from case data,
+serialization, and user-defined models.

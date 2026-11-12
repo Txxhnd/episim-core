@@ -23,6 +23,9 @@ The first version. It has not been published yet.
 - `estimate_sir_step_error` and `estimate_seir_step_error`, which estimate
   the error the timestep introduces by comparing a run with the same run at
   half the step.
+- Model-derived threshold quantities: `effective_reproduction_number` on
+  `SirParameters` and `SeirParameters` (`R0 * S / N` in any state), and the
+  `herd_immunity_threshold` and `final_size_fraction` metrics.
 - `SimulationResult` with the full trajectory, `EpidemicMetrics` (basic
   reproduction number, peak infectious population and its time, cumulative
   infections, cumulative incidence fraction), and `SimulationDiagnostics`

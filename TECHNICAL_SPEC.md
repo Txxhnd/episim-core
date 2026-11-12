@@ -860,10 +860,12 @@ The trajectory must contain:
 ```rust
 pub struct EpidemicMetrics {
     pub basic_reproduction_number: f64,
+    pub herd_immunity_threshold: f64,
     pub peak_infectious: f64,
     pub peak_infectious_time_days: f64,
     pub cumulative_infections_since_start: f64,
     pub cumulative_incidence_fraction: f64,
+    pub final_size_fraction: f64,
 }
 ```
 
@@ -911,13 +913,44 @@ This represents the cumulative fraction of the initial population newly infected
 
 The MVP must not present this measure as an epidemiological estimate derived from observed population data.
 
-## 10.6 Reproduction Number Restrictions
+### Herd-immunity threshold
 
-Do not expose an `Rt` field in v0.1.0.
+\[
+H=\begin{cases}1-\dfrac{1}{R_0} & R_0>1\\[4pt] 0 & R_0\le 1\end{cases}
+\]
 
-A future implementation may introduce effective reproduction number calculations, but its interpretation and assumptions must be documented independently.
+The fraction of the population that must be immune for the infected to decline.
 
-The MVP must distinguish model-derived theoretical quantities from empirical estimates based on surveillance data.
+### Final size
+
+In both models \(dS/dR=-R_0S/N\), so every exact solution satisfies \(S(t)=S(0)\,e^{-R_0(R(t)-R(0))/N}\). When the epidemic is over, \(S(\infty)\) solves
+
+\[
+S(\infty)=S(0)\,e^{-R_0\,(S(0)+\text{seed}-S(\infty))/N}
+\]
+
+where seed is the number infected (plus, for SEIR, exposed) at the start. With a positive seed, transmission, and susceptibles, the solution in \((0, S(0)]\) is unique and is found by bisection; otherwise the final size is 0. The metric is
+
+\[
+\text{final size fraction}=\frac{S(0)-S(\infty)}{N(0)}
+\]
+
+## 10.6 Reproduction Numbers
+
+The library exposes one model-derived effective reproduction number, as a method on each parameter type:
+
+```rust
+impl SirParameters {
+    pub fn effective_reproduction_number(&self, state: &SirState) -> Result<f64, SimulationError>;
+}
+impl SeirParameters {
+    pub fn effective_reproduction_number(&self, state: &SeirState) -> Result<f64, SimulationError>;
+}
+```
+
+It returns \(R_0\,S/N\), with \(N\) the total of the given state. In SIR \(dI/dt=\gamma I(R_{\text{eff}}-1)\), and in SEIR \(d(E+I)/dt=\gamma I(R_{\text{eff}}-1)\).
+
+It is not an `Rt` estimate. The library does not estimate the effective reproduction number from case data, and documentation must keep the two distinct: an estimate from surveillance depends on reporting, testing, and statistical assumptions that the models do not represent.
 
 ---
 

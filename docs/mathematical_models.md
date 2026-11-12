@@ -93,15 +93,71 @@ case data.
 | Metric | Definition |
 |---|---|
 | `basic_reproduction_number` | `R0 = beta / gamma`, for both models. The theoretical number of secondary infections from one case in a fully susceptible population. |
+| `herd_immunity_threshold` | `1 - 1/R0`, or 0 when `R0 <= 1`: the fraction of the population that must be immune for the infected to decline. |
 | `peak_infectious` | The largest `I` among the recorded observations. |
 | `peak_infectious_time_days` | The time of the earliest recorded observation at that peak. If `I` never rises above its initial value, this is day zero. |
 | `cumulative_infections_since_start` | `S(0) - S(T)`, where `T` is the final simulation time. Infections already present at day zero are not counted. |
 | `cumulative_incidence_fraction` | `(S(0) - S(T)) / N(0)`. |
+| `final_size_fraction` | `(S(0) - S(inf)) / N(0)`: the fraction newly infected by the time the epidemic is over, from the final size equation below. |
 
 The cumulative metrics refer to the final time `T` only. For any earlier
-time `t`, compute `S(0) - S(t)` from the trajectory.
+time `t`, compute `S(0) - S(t)` from the trajectory. As `T` grows,
+`cumulative_incidence_fraction` approaches `final_size_fraction`; comparing
+the two shows whether the simulated period covers the whole epidemic.
 
-There is no effective reproduction number (`Rt`) in this version.
+## Effective reproduction number
+
+```text
+effective R = R0 * S / N
+```
+
+`SirParameters::effective_reproduction_number` and
+`SeirParameters::effective_reproduction_number` compute it for any state,
+with `N` taken as the total of that state. It is the average number of
+people one infected person infects while a fraction `S / N` of the
+population is still susceptible. It sets the direction of the epidemic
+exactly:
+
+```text
+SIR:   dI/dt       = gamma * I * (effective R - 1)
+SEIR:  d(E + I)/dt = gamma * I * (effective R - 1)
+```
+
+So in SIR the infected peak exactly when effective R falls to 1, which is
+when the susceptible fraction falls to `1 / R0`. The herd-immunity threshold
+`1 - 1/R0` is the same condition seen from the immune side.
+
+This is a model-derived quantity. It is not the effective reproduction
+number `Rt` that public-health agencies estimate from case data, which
+depends on reporting, testing, and statistical assumptions this library does
+not model.
+
+## Final size
+
+Dividing `dS/dt = -beta * S * I / N` by `dR/dt = gamma * I` gives
+`dS/dR = -R0 * S / N`, in both models. Every exact solution therefore
+satisfies
+
+```text
+S(t) = S(0) * exp(-R0 * (R(t) - R(0)) / N)
+```
+
+at all times. When the epidemic is over, the exposed and infected are gone,
+so `R(inf) = N - S(inf)`, and the susceptibles left over solve the final size
+equation
+
+```text
+S(inf) = S(0) * exp(-R0 * (S(0) + seed - S(inf)) / N)
+```
+
+where `seed` is the number infected (plus, for SEIR, exposed) at the start.
+With a positive seed the equation has exactly one solution between 0 and
+`S(0)`; the library finds it by bisection. With no seed, no transmission, or
+no susceptibles, the final size is 0.
+
+For a vanishing seed in a fully susceptible population this is the textbook
+relation `z = 1 - exp(-R0 * z)` for the fraction infected `z`: about 80%
+when `R0 = 2`, and about 94% when `R0 = 3`.
 
 ## Closed-form reference cases
 
