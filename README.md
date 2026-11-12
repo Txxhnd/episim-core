@@ -6,10 +6,12 @@ fourth-order Runge-Kutta (RK4) solver and returns the full trajectory, a few
 model-derived metrics, and numerical diagnostics.
 
 - Pure Rust, no runtime dependencies, no `unsafe` code.
-- Every public function returns a `Result` with a typed error; invalid input
-  does not panic.
-- Numerical problems are reported, never hidden: compartment values are not
-  clipped, and population conservation is checked after every step.
+- The simulation functions and the settings constructors return a `Result`
+  with a typed error; invalid input does not panic.
+- Numerical problems the library detects are reported, never patched over:
+  compartment values are not clipped, and population conservation is checked
+  after every step. A fixed-step solver cannot detect every inaccurate
+  result; see the limitations below.
 
 `episim-core` is a simulation engine, not a forecasting product. Its output
 describes what the stated model does under the stated assumptions. It is not
@@ -103,8 +105,11 @@ structure, interventions, time-varying parameters, parameter fitting, or
 effective reproduction number (`Rt`).
 
 The solver uses a fixed step and has no error control. Choose a step that is
-small compared with `1 / beta`, `1 / sigma`, and `1 / gamma`; if the step is
-too large, the run fails with an error rather than returning clipped values.
+small compared with `1 / beta`, `1 / sigma`, and `1 / gamma`. A run stops
+with an error if a value becomes non-finite, a compartment goes materially
+negative, or the population drifts. A step that is too large can also return
+a plausible-looking but wrong trajectory without any error, so check
+important results against a run with half the step.
 The whole trajectory is kept in memory (32 bytes per step for SIR, 40 for
 SEIR), and a run is limited to 1,000,000 steps unless you raise the limit
 with `SimulationSettings::with_max_steps`.

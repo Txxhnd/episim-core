@@ -6,7 +6,14 @@ rust-version = "1.85"
 description = "A lightweight epidemiological simulation engine"
 readme = "README.md"
 # Ship the crate and its documentation only, not project planning documents.
-include = ["/src", "/tests", "/examples", "/benches", "/docs", "/README.md"]
+include = [
+    "/src/**/*.rs",
+    "/tests/**/*.rs",
+    "/examples/**/*.rs",
+    "/benches/**/*.rs",
+    "/docs/**/*.md",
+    "/README.md",
+]
 
 [dev-dependencies]
 criterion = { version = "0.7.0", default-features = false, features = ["cargo_bench_support"] }

@@ -78,9 +78,18 @@ where
 fn required_steps(settings: &SimulationSettings) -> Result<usize, SimulationError> {
     let duration = settings.duration_days();
     let step = settings.step_days();
-    // A duration far smaller than the step underflows to zero; it still needs one step.
-    let ratio = (duration / step).ceil().max(1.0);
-    if !ratio.is_finite() || ratio > settings.max_steps() as f64 {
+    // A whole number of steps often divides to just above that number
+    // (2.7 / 0.3 is 9.000000000000002). Shaving a few ulps off before rounding
+    // up keeps such a run from gaining a final step of rounding-error length.
+    // A duration far smaller than the step underflows to zero; it still needs
+    // one step.
+    // shortcut: the slack grows with the quotient and nears a whole step
+    // around 2^50 steps; runs that long cannot be allocated, so revisit this
+    // only if trajectories stop being stored in full.
+    let steps = (duration / step * (1.0 - 4.0 * f64::EPSILON))
+        .ceil()
+        .max(1.0);
+    if !steps.is_finite() || steps > settings.max_steps() as f64 {
         return Err(SimulationError::StepLimitExceeded);
     }
     // If one step cannot move the clock near the end of the run, the time
@@ -88,15 +97,8 @@ fn required_steps(settings: &SimulationSettings) -> Result<usize, SimulationErro
     if duration + step == duration {
         return Err(SimulationError::TimeStepTooSmall);
     }
-    // In range: `ratio` is at least 1 and at most `max_steps`.
-    let mut steps = ratio as usize;
-    // The division can round up past a duration the time grid already reaches
-    // one step earlier (609.6 / 0.6 gives 1017, yet 1016 * 0.6 is 609.6);
-    // counting that step would add a zero-length final interval.
-    if (steps - 1) as f64 * step >= duration {
-        steps -= 1;
-    }
-    Ok(steps)
+    // In range: `steps` is at least 1 and at most `max_steps`.
+    Ok(steps as usize)
 }
 
 fn reserve_trajectory<S>(capacity: usize) -> Result<Vec<Observation<S>>, SimulationError> {
@@ -192,9 +194,15 @@ mod tests {
 
     #[test]
     fn driver_records_final_state_at_requested_duration() {
-        // 0.1 accumulates to just under 1.0 after ten additions, and
-        // 1016 * 0.6 already rounds to 609.6 although 609.6 / 0.6 rounds up to 1017.
-        for (duration, step, steps) in [(1.0, 0.1, 10), (609.6, 0.6, 1016)] {
+        // 0.1 accumulates to just under 1.0 after ten additions. The other
+        // durations are whole multiples of the step whose quotient rounds to
+        // just above the whole number (2.7 / 0.3 is 9.000000000000002).
+        for (duration, step, steps) in [
+            (1.0, 0.1, 10),
+            (609.6, 0.6, 1016),
+            (2.7, 0.3, 9),
+            (4.2, 0.7, 6),
+        ] {
             let output = run([1000.0, 0.0], settings(duration, step), unit_flow).unwrap();
             let times = times(&output);
             assert_eq!(times.len(), steps + 1, "duration {duration}");
@@ -238,6 +246,32 @@ mod tests {
         let ten = settings(10.0, 1.0).with_max_steps(10).unwrap();
         let output = run([100.0, 0.0], ten, unit_flow).unwrap();
         assert_eq!(output.diagnostics.steps_executed, 10);
+
+        // The limit applies to the steps actually taken: 609.6 / 0.6 needs
+        // 1016 steps even though the quotient rounds to just above 1016.
+        let exact = settings(609.6, 0.6).with_max_steps(1016).unwrap();
+        let output = run([1000.0, 0.0], exact, unit_flow).unwrap();
+        assert_eq!(output.diagnostics.steps_executed, 1016);
+        let one_short = settings(609.6, 0.6).with_max_steps(1015).unwrap();
+        assert_eq!(
+            run([1000.0, 0.0], one_short, unit_flow).unwrap_err(),
+            SimulationError::StepLimitExceeded
+        );
+    }
+
+    #[test]
+    fn driver_counts_whole_steps_for_decimal_multiples_of_the_step() {
+        for step in [0.1, 0.15, 0.3, 0.6, 0.7] {
+            for multiple in 1..=5000_usize {
+                // The decimal number a user would type, not `multiple * step` in binary.
+                let duration: f64 = format!("{:.2}", multiple as f64 * step).parse().unwrap();
+                assert_eq!(
+                    required_steps(&settings(duration, step)),
+                    Ok(multiple),
+                    "duration {duration}, step {step}"
+                );
+            }
+        }
     }
 
     // On 32-bit targets every such configuration already exceeds the largest step limit.

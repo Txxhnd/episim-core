@@ -187,3 +187,28 @@ fn sir_final_time_equals_requested_duration() {
         assert_eq!(result.diagnostics.steps_executed, times.len() - 1);
     }
 }
+
+#[test]
+fn sir_first_step_matches_model_equations() {
+    // Over one very short step each compartment changes at the rate the
+    // equations give for the initial state: with S = 990, I = 10, N = 1000
+    // the infection flow is 0.3 * 990 * 10 / 1000 = 2.97 and the recovery
+    // flow is 0.1 * 10 = 1.
+    let step = 1e-3;
+    let result = simulate_sir(PARAMETERS, INITIAL, settings(step, step)).unwrap();
+    let next = result.trajectory[1].state;
+
+    let rates = [
+        ("susceptible", next.susceptible - INITIAL.susceptible, -2.97),
+        ("infected", next.infected - INITIAL.infected, 2.97 - 1.0),
+        ("recovered", next.recovered - INITIAL.recovered, 1.0),
+    ];
+    for (compartment, change, expected) in rates {
+        // The rates themselves drift by well under 0.1% during the step.
+        assert!(
+            (change / step - expected).abs() < 2e-3,
+            "{compartment}: {} per day, expected {expected}",
+            change / step
+        );
+    }
+}

@@ -47,7 +47,8 @@ pub fn simulate_seir(
   `SimulationSettings::new(duration_days, step_days)` rejects values that
   are not finite and positive, and sets the step limit to 1,000,000.
   `with_max_steps` changes the limit and rejects zero.
-- **No panics on bad input.** Every public function returns `Result`.
+- **No panics on bad input.** The simulation functions and the settings
+  constructors return `Result`.
 - **No hidden state.** There are no globals and no randomness; the same
   inputs give the same result in the same environment.
 - **No silent correction.** The library does not clip, rescale, or otherwise

@@ -206,3 +206,29 @@ fn seir_final_time_equals_requested_duration() {
         assert_eq!(result.diagnostics.steps_executed, times.len() - 1);
     }
 }
+
+#[test]
+fn seir_first_step_matches_model_equations() {
+    // Over one very short step each compartment changes at the rate the
+    // equations give for the initial state: with S = 980, E = 10, I = 10,
+    // N = 1000 the infection flow is 0.5 * 980 * 10 / 1000 = 4.9, the
+    // progression flow is 0.2 * 10 = 2, and the recovery flow is 0.1 * 10 = 1.
+    let step = 1e-3;
+    let result = simulate_seir(PARAMETERS, INITIAL, settings(step, step)).unwrap();
+    let next = result.trajectory[1].state;
+
+    let rates = [
+        ("susceptible", next.susceptible - INITIAL.susceptible, -4.9),
+        ("exposed", next.exposed - INITIAL.exposed, 4.9 - 2.0),
+        ("infected", next.infected - INITIAL.infected, 2.0 - 1.0),
+        ("recovered", next.recovered - INITIAL.recovered, 1.0),
+    ];
+    for (compartment, change, expected) in rates {
+        // The rates themselves drift by well under 0.1% during the step.
+        assert!(
+            (change / step - expected).abs() < 2e-3,
+            "{compartment}: {} per day, expected {expected}",
+            change / step
+        );
+    }
+}

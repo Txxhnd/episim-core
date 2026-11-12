@@ -30,7 +30,7 @@ over.
 
 ## Time handling
 
-The number of steps is `ceil(duration / step)`, and the run uses the
+The number of steps is `duration / step` rounded up, and the run uses the
 requested step for all of them except possibly the last, which is shortened
 to `duration - time` so the simulation never runs past the requested
 duration.
@@ -42,11 +42,14 @@ exactly.
 
 Two floating-point details are handled explicitly:
 
-- **Step count rounding.** `duration / step` can round up to a count whose
-  second-to-last grid point already equals the duration. For example,
-  `609.6 / 0.6` evaluates to 1017, while `1016 * 0.6` is already `609.6`.
-  The count is reduced by one in that case; otherwise the run would end with
-  a zero-length step and two observations at the same time.
+- **Step count rounding.** A duration that is a whole number of steps often
+  divides to just above that number: `2.7 / 0.3` evaluates to
+  `9.000000000000002`. Rounding that up would add a tenth step of
+  rounding-error length and two nearly identical final observations. The
+  quotient is therefore reduced by four ulps before it is rounded up, so
+  `2.7 / 0.3` gives 9 steps. The consequence is that a genuine final
+  interval shorter than about `1e-15` times the duration does not get a
+  step of its own; the last full step absorbs it.
 - **Steps too small for the clock.** If `duration + step == duration` in
   `f64`, the step cannot advance simulation time near the end of the run and
   the run is rejected with `TimeStepTooSmall`. Such a configuration needs
@@ -57,8 +60,9 @@ Two floating-point details are handled explicitly:
 ## Resource limits
 
 A run may take at most `max_steps` steps: 1,000,000 by default, changeable
-with `SimulationSettings::with_max_steps`. The limit is checked before any
-integration or allocation, and exceeding it returns `StepLimitExceeded`.
+with `SimulationSettings::with_max_steps`. The limit is compared with the
+step count described above, before any integration or allocation, and
+exceeding it returns `StepLimitExceeded`.
 
 Memory for the whole trajectory (`steps + 1` observations) is reserved up
 front with a fallible reservation. If it cannot be reserved, the run returns
@@ -88,10 +92,18 @@ checks, in this order.
 - There is no adaptive step control and no error estimate. Accuracy depends
   entirely on the step you choose.
 - RK4 is an explicit method. If the step is large compared with the fastest
-  time scale (`1 / beta`, `1 / sigma`, or `1 / gamma`), the solution can
-  become inaccurate or unstable. Instability shows up as one of the errors
-  above, not as silently wrong output. An inaccurate but stable run is not
-  detected, so compare against a smaller step if accuracy matters.
+  time scale (`1 / beta`, `1 / sigma`, or `1 / gamma`), the solution becomes
+  inaccurate and can become unstable.
+- **An unstable or inaccurate run is not always detected.** The checks above
+  catch a run only when a value becomes non-finite, a compartment goes
+  materially negative, or the population drifts. For a compartment that
+  should decay at rate `r`, RK4 multiplies it each step by
+  `1 - z + z^2/2 - z^3/6 + z^4/24` with `z = r * step`. That factor exceeds 1
+  once `z` is above about 2.785, so the compartment grows when it should
+  shrink. With `beta = 0`, `gamma = 3`, and a step of one day the factor is
+  1.375: the infected compartment grows by 37.5% per step, stays positive,
+  and conserves the population, so the run returns `Ok` with a wrong
+  trajectory. Keep `gamma * step` and `sigma * step` well below 1.
 - Positivity is not enforced by the method.
 - Peak metrics are taken from recorded observations, so the peak time is
   resolved only to the nearest step.
