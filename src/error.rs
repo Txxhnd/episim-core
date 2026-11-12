@@ -25,6 +25,8 @@ pub enum SimulationError {
     InvalidTimeStep,
     /// The maximum number of integration steps is zero.
     InvalidMaximumSteps,
+    /// The recording interval is zero.
+    InvalidRecordInterval,
     /// The simulation requires more integration steps than the configured maximum.
     StepLimitExceeded,
     /// The timestep is too small to advance the floating-point simulation clock.
@@ -74,6 +76,9 @@ impl fmt::Display for SimulationError {
             }
             Self::InvalidTimeStep => f.write_str("timestep must be finite and greater than zero"),
             Self::InvalidMaximumSteps => f.write_str("maximum steps must be greater than zero"),
+            Self::InvalidRecordInterval => {
+                f.write_str("recording interval must be greater than zero")
+            }
             Self::StepLimitExceeded => {
                 f.write_str("required integration steps exceed the configured maximum")
             }

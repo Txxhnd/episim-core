@@ -2,18 +2,21 @@ use crate::error::SimulationError;
 
 const DEFAULT_MAX_STEPS: usize = 1_000_000;
 
-/// Validated simulation duration, fixed timestep, and integration step limit.
+/// Validated simulation duration, fixed timestep, integration step limit,
+/// and recording interval.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SimulationSettings {
     duration_days: f64,
     step_days: f64,
     max_steps: usize,
+    record_every: usize,
 }
 
 impl SimulationSettings {
     /// Creates settings with a duration and fixed timestep, both in days.
     ///
-    /// The maximum number of integration steps defaults to 1,000,000.
+    /// The maximum number of integration steps defaults to 1,000,000, and
+    /// every step is recorded.
     ///
     /// # Errors
     ///
@@ -31,6 +34,7 @@ impl SimulationSettings {
             duration_days,
             step_days,
             max_steps: DEFAULT_MAX_STEPS,
+            record_every: 1,
         })
     }
 
@@ -46,6 +50,26 @@ impl SimulationSettings {
         Ok(Self { max_steps, ..self })
     }
 
+    /// Records only every `steps`-th integration step in the trajectory.
+    ///
+    /// The initial state and the final state are always recorded. Every step
+    /// is still integrated and checked; this only reduces how many
+    /// observations are stored. Peak metrics are read from the recorded
+    /// observations, so a larger interval makes them coarser.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SimulationError::InvalidRecordInterval`] if `steps` is zero.
+    pub fn with_record_every(self, steps: usize) -> Result<Self, SimulationError> {
+        if steps == 0 {
+            return Err(SimulationError::InvalidRecordInterval);
+        }
+        Ok(Self {
+            record_every: steps,
+            ..self
+        })
+    }
+
     /// Total simulation duration in days.
     pub fn duration_days(&self) -> f64 {
         self.duration_days
@@ -59,5 +83,10 @@ impl SimulationSettings {
     /// Maximum number of integration steps a simulation may execute.
     pub fn max_steps(&self) -> usize {
         self.max_steps
+    }
+
+    /// Number of integration steps between recorded observations.
+    pub fn record_every(&self) -> usize {
+        self.record_every
     }
 }

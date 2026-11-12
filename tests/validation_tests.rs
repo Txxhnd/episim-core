@@ -54,3 +54,32 @@ fn settings_accepts_explicit_positive_max_steps() {
     assert_eq!(settings.duration_days(), 10.0);
     assert_eq!(settings.step_days(), 0.25);
 }
+
+#[test]
+fn settings_records_every_step_by_default() {
+    let settings = SimulationSettings::new(10.0, 1.0).unwrap();
+    assert_eq!(settings.record_every(), 1);
+}
+
+#[test]
+fn settings_rejects_zero_record_interval() {
+    let settings = SimulationSettings::new(10.0, 1.0).unwrap();
+    assert_eq!(
+        settings.with_record_every(0),
+        Err(SimulationError::InvalidRecordInterval)
+    );
+}
+
+#[test]
+fn settings_accepts_explicit_record_interval() {
+    let settings = SimulationSettings::new(10.0, 0.25)
+        .unwrap()
+        .with_max_steps(5_000_000)
+        .unwrap()
+        .with_record_every(4)
+        .unwrap();
+    assert_eq!(settings.record_every(), 4);
+    assert_eq!(settings.max_steps(), 5_000_000);
+    assert_eq!(settings.duration_days(), 10.0);
+    assert_eq!(settings.step_days(), 0.25);
+}

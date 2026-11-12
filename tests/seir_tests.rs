@@ -369,3 +369,27 @@ fn seir_surfaces_step_limit_clock_and_population_errors() {
         SimulationError::InvalidPopulation
     );
 }
+
+#[test]
+fn seir_records_every_nth_step_without_changing_the_integration() {
+    let every_step = settings(160.0, 0.25);
+    let daily = every_step.with_record_every(4).unwrap();
+    let full = simulate_seir(PARAMETERS, INITIAL, every_step).unwrap();
+    let thinned = simulate_seir(PARAMETERS, INITIAL, daily).unwrap();
+
+    // 640 steps of a quarter day, recorded once per day.
+    assert_eq!(thinned.trajectory.len(), 161);
+    assert_eq!(thinned.diagnostics.steps_executed, 640);
+    for (day, observation) in thinned.trajectory.iter().enumerate() {
+        assert_eq!(observation.time_days, day as f64);
+        // Each recorded observation is exactly the one the full run has.
+        assert_eq!(*observation, full.trajectory[day * 4]);
+    }
+    assert_eq!(thinned.diagnostics, full.diagnostics);
+    assert_eq!(
+        thinned.metrics.cumulative_infections_since_start,
+        full.metrics.cumulative_infections_since_start
+    );
+    // The peak is read from fewer observations, so it can only be lower or equal.
+    assert!(thinned.metrics.peak_infectious <= full.metrics.peak_infectious);
+}

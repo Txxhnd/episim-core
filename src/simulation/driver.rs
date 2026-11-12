@@ -14,10 +14,11 @@ pub(crate) struct SimulationOutput<S> {
 }
 
 /// Integrates `derivative` from `initial` over the configured duration,
-/// recording the initial state and the state after every accepted step.
+/// recording the initial state, the state after every `record_every`-th
+/// accepted step, and the final state.
 ///
 /// `population` is the fixed initial population the caller validated; every
-/// recorded state is checked against it.
+/// accepted state is checked against it, recorded or not.
 pub(crate) fn run_simulation<const N: usize, S, D, C>(
     initial: [f64; N],
     population: f64,
@@ -33,7 +34,10 @@ where
     let duration = settings.duration_days();
     let step = settings.step_days();
     let required_steps = required_steps(&settings)?;
+    let record_every = settings.record_every();
+    // The initial state, every `record_every`-th step, and the final step.
     let capacity = required_steps
+        .div_ceil(record_every)
         .checked_add(1)
         .ok_or(SimulationError::AllocationFailure)?;
     let mut trajectory = reserve_trajectory(capacity)?;
@@ -61,10 +65,12 @@ where
             index as f64 * step
         };
         check_state(&state, &compartment_names, population, &mut diagnostics)?;
-        trajectory.push(Observation {
-            time_days: time,
-            state: to_state(state),
-        });
+        if index % record_every == 0 || index == required_steps {
+            trajectory.push(Observation {
+                time_days: time,
+                state: to_state(state),
+            });
+        }
         diagnostics.steps_executed = index;
     }
     Ok(SimulationOutput {
@@ -84,8 +90,8 @@ fn required_steps(settings: &SimulationSettings) -> Result<usize, SimulationErro
     // A duration far smaller than the step underflows to zero; it still needs
     // one step.
     // shortcut: the slack grows with the quotient and nears a whole step
-    // around 2^50 steps; runs that long cannot be allocated, so revisit this
-    // only if trajectories stop being stored in full.
+    // around 2^50 steps; a run that long would take years to compute, so
+    // revisit this only if steps become several orders of magnitude cheaper.
     let steps = (duration / step * (1.0 - 4.0 * f64::EPSILON))
         .ceil()
         .max(1.0);
@@ -399,6 +405,43 @@ mod tests {
                 "total {rejected}"
             );
         }
+    }
+
+    #[test]
+    fn driver_records_every_nth_step_and_always_the_final_state() {
+        let every = |steps| settings(10.0, 1.0).with_record_every(steps).unwrap();
+
+        // Ten steps, every third recorded, plus the final one.
+        let output = run([100.0, 0.0], every(3), unit_flow).unwrap();
+        assert_eq!(times(&output), [0.0, 3.0, 6.0, 9.0, 10.0]);
+        assert_eq!(output.trajectory[4].state, [90.0, 10.0]);
+        assert_eq!(output.diagnostics.steps_executed, 10);
+
+        // The final step is not recorded twice when the interval divides the count.
+        let output = run([100.0, 0.0], every(5), unit_flow).unwrap();
+        assert_eq!(times(&output), [0.0, 5.0, 10.0]);
+
+        // An interval longer than the run leaves the two end points.
+        let output = run([100.0, 0.0], every(1000), unit_flow).unwrap();
+        assert_eq!(times(&output), [0.0, 10.0]);
+    }
+
+    #[test]
+    fn driver_checks_and_counts_steps_that_are_not_recorded() {
+        let sparse = |duration| settings(duration, 1.0).with_record_every(1000).unwrap();
+
+        // The leak starts at the third step, which is never recorded.
+        let leaks_later = |[a, _]: [f64; 2]| [-1.0, if a < 97.5 { 2.0 } else { 1.0 }];
+        assert_eq!(
+            run([100.0, 0.0], sparse(10.0), leaks_later).unwrap_err(),
+            SimulationError::PopulationConservationViolation
+        );
+
+        // Both steps produce a tolerated negative value; only the last is recorded.
+        let tiny_flow = |_| [-1e-12, 1e-12];
+        let output = run([0.0, 1000.0], sparse(2.0), tiny_flow).unwrap();
+        assert_eq!(output.trajectory.len(), 2);
+        assert_eq!(output.diagnostics.tolerated_negative_value_count, 2);
     }
 
     #[test]
