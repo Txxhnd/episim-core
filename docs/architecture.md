@@ -35,6 +35,7 @@ simulate_sir / simulate_seir          src/models/
 | `solver/rk4.rs` | private | One RK4 step over a fixed-size array, with finiteness checks. |
 | `simulation/driver.rs` | private | Step counting, time handling, trajectory storage, and per-state checks. |
 | `metrics.rs` | type is public | `EpidemicMetrics` and its calculation from a trajectory. |
+| `accuracy.rs` | type is public | `StepErrorEstimate` and the comparison of a run with its half-step run. |
 | `result.rs` | types are public | `Observation`, `SimulationDiagnostics`, `SimulationResult`. |
 
 The modules themselves are private. Public types are re-exported from the

@@ -141,6 +141,38 @@ checks, in this order, whether or not the step is recorded.
   resolved only to the nearest recorded step.
 
 A practical check is to rerun with half the step and compare.
+`estimate_sir_step_error` and `estimate_seir_step_error` do exactly that.
+
+## Estimating the step error
+
+Halving the step divides RK4's error by about 16. The difference between a
+run and the same run at half the step is therefore about 15/16 of the first
+run's error, and
+
+```text
+estimated error = 16/15 * largest difference between the two runs
+```
+
+taken over every compartment at every recorded time. The half-step run
+records the same times as the original: its recording interval and its step
+limit are both doubled.
+
+| Field | Meaning |
+|---|---|
+| `max_absolute_error` | Estimated largest error of any compartment at any recorded time, in individuals. |
+| `max_relative_error` | The same, divided by the initial population. |
+
+Limits of the estimate:
+
+- It costs about three times one run.
+- It assumes the step is small enough for the sixteenfold rule to hold. In
+  the reference scenarios (SIR with `beta = 0.5`, `gamma = 0.1`; SEIR with
+  `beta = 0.5`, `sigma = 0.2`, `gamma = 0.1`; 40 days) it was within 4% of
+  the error measured against a run at 1/256 day, for steps from 4 days, the
+  largest the stability limit accepts there, down to 1/8 day.
+- It covers the recorded times only. With a recording interval above one, an
+  error peak between recorded steps is not seen.
+- It is an estimate of discretisation error. It does not judge the model.
 
 ## Verification
 

@@ -20,6 +20,9 @@ The first version. It has not been published yet.
   limit that defaults to 1,000,000 and can be changed with `with_max_steps`.
 - `SimulationSettings::with_record_every`, to store only every N-th step of
   a run while still integrating and checking every step.
+- `estimate_sir_step_error` and `estimate_seir_step_error`, which estimate
+  the error the timestep introduces by comparing a run with the same run at
+  half the step.
 - `SimulationResult` with the full trajectory, `EpidemicMetrics` (basic
   reproduction number, peak infectious population and its time, cumulative
   infections, cumulative incidence fraction), and `SimulationDiagnostics`

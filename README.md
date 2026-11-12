@@ -111,8 +111,35 @@ step exceeds 2, because RK4 damps too weakly beyond that and can turn decay
 into growth; the error reports the largest step that would be accepted. A run
 also stops with an error if a value becomes non-finite, a compartment goes
 materially negative, or the population drifts. Below that limit a coarse
-step is still inaccurate and nothing detects it, so check important results
-against a run with half the step.
+step is still inaccurate, and a plain run does not tell you so. To find out
+how much error the step introduces, ask for an estimate:
+
+```rust
+use episim_core::{
+    SimulationError, SimulationSettings, SirParameters, SirState, estimate_sir_step_error,
+};
+
+let parameters = SirParameters {
+    beta_per_day: 0.3,
+    gamma_per_day: 0.1,
+};
+let initial_state = SirState {
+    susceptible: 990.0,
+    infected: 10.0,
+    recovered: 0.0,
+};
+let settings = SimulationSettings::new(160.0, 0.25)?;
+
+let estimate = estimate_sir_step_error(parameters, initial_state, settings)?;
+// With a quarter-day step no compartment is off by more than 0.001 people.
+assert!(estimate.max_absolute_error < 1e-3);
+# Ok::<(), SimulationError>(())
+```
+
+`estimate_seir_step_error` does the same for SEIR. The estimate reruns the
+simulation at half the step and compares the two, so it costs about three
+times as much as one run. It measures the error from the step size only,
+not how well the model matches reality.
 Every recorded observation is kept in memory (32 bytes each for SIR, 40 for
 SEIR). To use a small step without storing every step, record every N-th
 one:

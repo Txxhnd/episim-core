@@ -1061,6 +1061,39 @@ pub struct SimulationDiagnostics {
 
 These diagnostics provide visibility into the numerical behavior of each simulation.
 
+## 12.5 Step Error Estimate
+
+The fixed-step solver has no error control, and the diagnostics above do not measure accuracy. The library must therefore offer an explicit estimate of discretisation error for each model:
+
+```rust
+pub fn estimate_sir_step_error(
+    parameters: SirParameters,
+    initial_state: SirState,
+    settings: SimulationSettings,
+) -> Result<StepErrorEstimate, SimulationError>;
+
+pub fn estimate_seir_step_error(
+    parameters: SeirParameters,
+    initial_state: SeirState,
+    settings: SimulationSettings,
+) -> Result<StepErrorEstimate, SimulationError>;
+
+pub struct StepErrorEstimate {
+    pub max_absolute_error: f64,
+    pub max_relative_error: f64,
+}
+```
+
+The estimate runs the simulation as configured and again at half the timestep, with the recording interval and step limit doubled so both runs record the same times. Because the global error of RK4 falls by about 16 when the step is halved:
+
+\[
+\text{estimated error}=\frac{16}{15}\max_{t,i}\left|X_i^{h}(t)-X_i^{h/2}(t)\right|
+\]
+
+taken over every compartment at every recorded time. `max_relative_error` divides this by the initial population.
+
+The estimate must return any error either run returns. It costs about three times one run, covers recorded times only, and assumes the step is in the range where the sixteenfold rule holds. It estimates discretisation error; it is not a statement about model validity.
+
 ---
 
 # 13. Testing Strategy
