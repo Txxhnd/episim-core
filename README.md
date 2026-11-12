@@ -1,0 +1,135 @@
+# episim-core
+
+A small Rust library for deterministic epidemiological simulation. It
+integrates the SIR and SEIR compartmental models with a fixed-step classical
+fourth-order Runge-Kutta (RK4) solver and returns the full trajectory, a few
+model-derived metrics, and numerical diagnostics.
+
+- Pure Rust, no runtime dependencies, no `unsafe` code.
+- Every public function returns a `Result` with a typed error; invalid input
+  does not panic.
+- Numerical problems are reported, never hidden: compartment values are not
+  clipped, and population conservation is checked after every step.
+
+`episim-core` is a simulation engine, not a forecasting product. Its output
+describes what the stated model does under the stated assumptions. It is not
+calibrated against, or an estimate of, any real-world outbreak.
+
+## Quick start
+
+The crate is not published on crates.io yet, so depend on it by path or git:
+
+```toml
+[dependencies]
+episim-core = { path = "../episim-core" }
+```
+
+```rust
+use episim_core::{SimulationError, SimulationSettings, SirParameters, SirState, simulate_sir};
+
+fn main() -> Result<(), SimulationError> {
+    // Rates are per day; compartments are population counts.
+    let parameters = SirParameters {
+        beta_per_day: 0.3,
+        gamma_per_day: 0.1,
+    };
+    let initial_state = SirState {
+        susceptible: 990.0,
+        infected: 10.0,
+        recovered: 0.0,
+    };
+    // Simulate 160 days with a fixed step of a quarter day.
+    let settings = SimulationSettings::new(160.0, 0.25)?;
+
+    let result = simulate_sir(parameters, initial_state, settings)?;
+
+    for observation in result.trajectory.iter().step_by(80) {
+        let state = observation.state;
+        println!(
+            "day {:>3}: S = {:6.1}, I = {:6.1}, R = {:6.1}",
+            observation.time_days, state.susceptible, state.infected, state.recovered
+        );
+    }
+    println!(
+        "peak of {:.1} infectious on day {}",
+        result.metrics.peak_infectious, result.metrics.peak_infectious_time_days
+    );
+    Ok(())
+}
+```
+
+SEIR works the same way through `simulate_seir`, `SeirParameters`, and
+`SeirState`. Two runnable examples print a fuller summary:
+
+```sh
+cargo run --example basic_sir
+cargo run --example basic_seir
+```
+
+## What a simulation returns
+
+`SimulationResult` has three public fields.
+
+| Field | Contents |
+|---|---|
+| `trajectory` | One `Observation` (time in days plus the model state) for day zero and for every integration step. The last one is exactly at the requested duration. |
+| `metrics` | Basic reproduction number `R0 = beta / gamma`, peak infectious population and the day it is first reached, new infections since the start `S(0) - S(T)`, and that number as a fraction of the initial population. |
+| `diagnostics` | Steps executed, the largest absolute and relative population drift, and how many recorded values were negative within roundoff tolerance. |
+
+Peak metrics are read from the recorded observations, so their time
+resolution is the timestep.
+
+## Model assumptions
+
+Both models assume:
+
+1. A closed population: no births, deaths, or migration.
+2. Homogeneous mixing.
+3. Parameters that stay constant for the whole simulation.
+4. Permanent immunity after recovery.
+5. Transmission only from the infected compartment.
+6. Deterministic dynamics, with fractional "expected" population counts.
+
+Transmission is frequency-dependent: new infections occur at the rate
+`beta * S * I / N`, where `N` is the total of the initial state and stays
+fixed. In SEIR the exposed compartment is a latent, non-infectious stage; it
+is not the clinical incubation period.
+
+## Scope and limitations
+
+Version 0.1.0 contains the SIR and SEIR models and one solver. It has no
+command-line interface, serialization, stochastic or agent-based models, age
+structure, interventions, time-varying parameters, parameter fitting, or
+effective reproduction number (`Rt`).
+
+The solver uses a fixed step and has no error control. Choose a step that is
+small compared with `1 / beta`, `1 / sigma`, and `1 / gamma`; if the step is
+too large, the run fails with an error rather than returning clipped values.
+The whole trajectory is kept in memory (32 bytes per step for SIR, 40 for
+SEIR), and a run is limited to 1,000,000 steps unless you raise the limit
+with `SimulationSettings::with_max_steps`.
+
+## Documentation
+
+- [Mathematical models](docs/mathematical_models.md): equations, units,
+  assumptions, and metric definitions.
+- [Numerical methods](docs/numerical_methods.md): the RK4 scheme, time
+  handling, and the checks applied to every step.
+- [Architecture](docs/architecture.md): module layout, data flow, and the
+  performance baseline.
+- [API design](docs/api_design.md): public types, conventions, and errors.
+
+API reference: `cargo doc --no-deps --open`.
+
+## Development
+
+Requires Rust 1.85 or newer.
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets
+cargo test --doc
+cargo doc --no-deps --all-features
+cargo bench
+```
