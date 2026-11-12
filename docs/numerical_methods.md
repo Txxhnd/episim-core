@@ -64,14 +64,16 @@ with `SimulationSettings::with_max_steps`. The limit is compared with the
 step count described above, before any integration or allocation, and
 exceeding it returns `StepLimitExceeded`.
 
-Memory for the whole trajectory (`steps + 1` observations) is reserved up
-front with a fallible reservation. If it cannot be reserved, the run returns
+Memory for the recorded trajectory (the initial state plus one observation
+per recorded step) is reserved up front with a fallible reservation. By
+default every step is recorded; `SimulationSettings::with_record_every`
+records every N-th step and always the final state. If it cannot be reserved, the run returns
 `AllocationFailure`.
 
-## Checks on every recorded state
+## Checks on every accepted state
 
 The initial state and the state after every step go through the same
-checks, in this order.
+checks, in this order, whether or not the step is recorded.
 
 1. **Finite values.** A NaN or infinite compartment is an error.
 2. **Negative values.** RK4 does not guarantee non-negative compartments.
@@ -136,7 +138,7 @@ checks, in this order.
   the exact value is 14%. Keep every rate times the step well below 1.
 - Positivity is not enforced by the method.
 - Peak metrics are taken from recorded observations, so the peak time is
-  resolved only to the nearest step.
+  resolved only to the nearest recorded step.
 
 A practical check is to rerun with half the step and compare.
 

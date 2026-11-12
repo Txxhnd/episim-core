@@ -448,6 +448,12 @@ This is an engineering safeguard, not an epidemiological restriction.
 
 The engine must calculate the required number of steps before allocating the trajectory and reject configurations that exceed the configured maximum.
 
+### Recording Interval
+
+By default every accepted integration step is recorded. Users may configure a recording interval of N steps through a configuration method, after which only every N-th step is stored. The initial state and the final state are always recorded. An interval of zero must be rejected with `InvalidRecordInterval`.
+
+The recording interval changes storage only. Every step is still integrated, validated, and counted in the diagnostics, and the maximum step limit still applies to integration steps. Peak metrics are read from recorded observations, so a longer interval makes them coarser.
+
 ## 6.2 Timestep Handling
 
 The engine uses fixed timesteps, except for the final interval.
@@ -846,7 +852,7 @@ pub struct SimulationResult<S> {
 The trajectory must contain:
 
 - Initial observation at day zero.
-- Every accepted integration step.
+- Every accepted integration step, or every N-th one when a recording interval is configured (Section 6.1).
 - Final observation at the requested duration.
 
 ## 10.5 Epidemiological Metrics
@@ -952,6 +958,8 @@ pub enum SimulationError {
     InvalidTimeStep,
 
     InvalidMaximumSteps,
+
+    InvalidRecordInterval,
 
     StepLimitExceeded,
 

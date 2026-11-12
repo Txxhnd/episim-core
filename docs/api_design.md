@@ -47,6 +47,7 @@ pub fn simulate_seir(
   `SimulationSettings::new(duration_days, step_days)` rejects values that
   are not finite and positive, and sets the step limit to 1,000,000.
   `with_max_steps` changes the limit and rejects zero.
+  `with_record_every` records only every N-th step and rejects zero.
 - **No panics on bad input.** The simulation functions and the settings
   constructors return `Result`.
 - **No hidden state.** There are no globals and no randomness; the same
@@ -61,7 +62,7 @@ pub fn simulate_seir(
 
 | Group | Variants | When |
 |---|---|---|
-| Invalid configuration | `InvalidParameter { name }`, `InvalidDuration`, `InvalidTimeStep`, `InvalidMaximumSteps`, `TimeStepTooLarge { max_step_days }` | A rate, duration, timestep, or step limit is outside its valid range, or the timestep is too large for stable integration (the model's fastest decay rate times the step is above 2; `max_step_days` is the largest step that would be accepted). `name` is the field name, for example `"gamma_per_day"`. |
+| Invalid configuration | `InvalidParameter { name }`, `InvalidDuration`, `InvalidTimeStep`, `InvalidMaximumSteps`, `InvalidRecordInterval`, `TimeStepTooLarge { max_step_days }` | A rate, duration, timestep, step limit, or recording interval is outside its valid range, or the timestep is too large for stable integration (the model's fastest decay rate times the step is above 2; `max_step_days` is the largest step that would be accepted). `name` is the field name, for example `"gamma_per_day"`. |
 | Invalid initial population | `InvalidInitialState { compartment }`, `InvalidPopulation` | A compartment is negative or not finite, or the total is zero or not finite. |
 | Numerical instability | `NonFiniteIntermediate { stage }`, `NonFiniteNumericalState { compartment }`, `NegativeCompartment { compartment }`, `PopulationConservationViolation` | The integration produced a value the library will not accept. |
 | Resource limits | `StepLimitExceeded`, `TimeStepTooSmall`, `AllocationFailure` | The run needs more steps than allowed, a step too small for `f64` time, or more memory than could be reserved. |

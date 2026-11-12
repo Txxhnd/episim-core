@@ -74,12 +74,12 @@ cargo run --example basic_seir
 
 | Field | Contents |
 |---|---|
-| `trajectory` | One `Observation` (time in days plus the model state) for day zero and for every integration step. The last one is exactly at the requested duration. |
+| `trajectory` | One `Observation` (time in days plus the model state) for day zero and for every recorded integration step: every step by default, or every N-th step with `SimulationSettings::with_record_every`. The last one is always the final state, exactly at the requested duration. |
 | `metrics` | Basic reproduction number `R0 = beta / gamma`, peak infectious population and the day it is first reached, new infections since the start `S(0) - S(T)`, and that number as a fraction of the initial population. |
 | `diagnostics` | Steps executed, the largest absolute and relative population drift, and how many recorded values were negative within roundoff tolerance. |
 
 Peak metrics are read from the recorded observations, so their time
-resolution is the timestep.
+resolution is the recording interval, which is the timestep by default.
 
 ## Model assumptions
 
@@ -113,9 +113,21 @@ also stops with an error if a value becomes non-finite, a compartment goes
 materially negative, or the population drifts. Below that limit a coarse
 step is still inaccurate and nothing detects it, so check important results
 against a run with half the step.
-The whole trajectory is kept in memory (32 bytes per step for SIR, 40 for
-SEIR), and a run is limited to 1,000,000 steps unless you raise the limit
-with `SimulationSettings::with_max_steps`.
+Every recorded observation is kept in memory (32 bytes each for SIR, 40 for
+SEIR). To use a small step without storing every step, record every N-th
+one:
+
+```rust
+use episim_core::{SimulationError, SimulationSettings};
+
+// 16,000 steps of 0.01 days, recorded once per simulated day.
+let settings = SimulationSettings::new(160.0, 0.01)?.with_record_every(100)?;
+assert_eq!(settings.record_every(), 100);
+# Ok::<(), SimulationError>(())
+```
+
+Every step is still integrated and checked. A run is limited to 1,000,000
+steps unless you raise the limit with `SimulationSettings::with_max_steps`.
 
 ## Documentation
 

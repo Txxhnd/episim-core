@@ -67,7 +67,7 @@ None of them appears in the public API.
 | `f64` everywhere | Compartments are expected counts, not integers. |
 | Population `N` fixed from the initial state | Recomputing it each step would feed numerical drift back into the transmission term. |
 | Fixed-size arrays in the solver | No heap allocation inside a step. |
-| Full trajectory stored | Simple, and what the metrics and callers need; memory is linear in the step count. |
+| Every step stored by default | Simple, and what the metrics and callers need; memory is linear in the number of recorded steps. `with_record_every` stores fewer. |
 | Step limit with a default of 1,000,000 | Guards against accidentally huge runs. |
 | Fallible trajectory reservation | An oversized run returns an error and does not abort the process. |
 | Errors, never clipping | A clipped state would hide a step size that is too large. |
@@ -87,7 +87,7 @@ None of them appears in the public API.
 
 For a fixed model, run time and memory are both linear in the number of
 steps. Each observation takes 32 bytes for SIR and 40 bytes for SEIR, so a
-1,000,000-step run stores about 32 MB or 40 MB.
+1,000,000-step run stores about 32 MB or 40 MB when every step is recorded.
 
 ## Performance baseline
 
