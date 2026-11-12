@@ -44,7 +44,8 @@ pub(crate) fn initial_population(
 /// where decay turns into growth without any negative value or population
 /// drift. In randomised comparisons against fine-step runs, no run with
 /// `z <= 2` moved a compartment in the wrong direction or missed the final
-/// incidence by more than 0.1; such runs appear from about 2.2.
+/// incidence by more than 0.1; such runs appear from about 2.2. The ignored
+/// test in `tests/stability_evidence_tests.rs` repeats the comparison.
 const MAX_RATE_TIMES_STEP: f64 = 2.0;
 
 /// Rejects a timestep that is too large for `fastest_rate_per_day`, the

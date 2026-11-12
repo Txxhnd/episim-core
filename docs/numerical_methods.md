@@ -127,7 +127,9 @@ checks, in this order.
   final incidence by more than 0.1 (226,590 accepted SIR runs and 107,633
   accepted SEIR runs). With a limit at the stability boundary of 2.785 such
   runs do occur, from a product of about 2.2. This is evidence, not a proof
-  that every accepted run is qualitatively right.
+  that every accepted run is qualitatively right. The measurement is kept
+  as an ignored test; repeat it with
+  `cargo test --release --test stability_evidence_tests -- --ignored --nocapture`.
 - **Inaccuracy is not detected.** The limit is a stability guard, not an
   accuracy target. At the limit a run still has large errors: with
   `gamma * step = 2` the infected compartment falls to 33% per step where

@@ -497,7 +497,7 @@ The step compared with the limit is the step actually taken, `min(step_days, dur
 
 The error is `TimeStepTooLarge { max_step_days }`, where `max_step_days` is `2 / fastest rate`, the largest step accepted for the same parameters.
 
-The limit of 2 is an engineering choice supported by measurement, not a derived bound. In randomised comparisons against fine-step runs, no run within the limit moved a compartment in the wrong direction or missed the final incidence by more than 0.1, while runs between about 2.2 and the stability boundary at 2.785 did. The limit and the SEIR rate should be revisited if a counterexample is found.
+The limit of 2 is an engineering choice supported by measurement, not a derived bound. In randomised comparisons against fine-step runs, no run within the limit moved a compartment in the wrong direction or missed the final incidence by more than 0.1, while runs between about 2.2 and the stability boundary at 2.785 did. The limit and the SEIR rate should be revisited if a counterexample is found. The comparison is kept in the repository as the ignored test `tests/stability_evidence_tests.rs`.
 
 This is a stability guard, not an accuracy guarantee. A timestep within the limit can still give inaccurate results, and the engine does not detect that.
 
