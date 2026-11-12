@@ -1,3 +1,5 @@
+use crate::metrics::EpidemicMetrics;
+
 /// Model state recorded at one simulation time.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Observation<S> {
@@ -21,4 +23,16 @@ pub struct SimulationDiagnostics {
     /// the roundoff tolerance `64 * f64::EPSILON * max(N0, 1)`. Such values
     /// are reported unchanged in the trajectory, never clipped to zero.
     pub tolerated_negative_value_count: usize,
+}
+
+/// Complete outcome of a simulation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SimulationResult<S> {
+    /// The initial observation at day zero followed by one observation per
+    /// accepted integration step; the last one is at the requested duration.
+    pub trajectory: Vec<Observation<S>>,
+    /// Epidemiological metrics derived from the trajectory.
+    pub metrics: EpidemicMetrics,
+    /// Numerical diagnostics collected during integration.
+    pub diagnostics: SimulationDiagnostics,
 }
