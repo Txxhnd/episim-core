@@ -5,6 +5,9 @@ edition = "2024"
 rust-version = "1.85"
 description = "A lightweight epidemiological simulation engine"
 readme = "README.md"
+license = "MIT"
+keywords = ["epidemiology", "simulation", "sir", "seir", "ode"]
+categories = ["science", "simulation", "mathematics"]
 # Ship the crate and its documentation only, not project planning documents.
 include = [
     "/src/**/*.rs",
@@ -14,6 +17,7 @@ include = [
     "/docs/**/*.md",
     "/README.md",
     "/CHANGELOG.md",
+    "/LICENSE",
 ]
 
 [dev-dependencies]
