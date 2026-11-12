@@ -68,6 +68,15 @@ cargo run --example basic_sir
 cargo run --example basic_seir
 ```
 
+Two more are meant for teaching. One prints a whole outbreak as CSV, one row
+per day, to chart in a spreadsheet; the other prints a table of how peak,
+timing and final size change with R0:
+
+```sh
+cargo run --example outbreak_curve > outbreak.csv
+cargo run --example r0_sweep
+```
+
 ## What a simulation returns
 
 `SimulationResult` has three public fields.

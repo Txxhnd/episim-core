@@ -40,6 +40,8 @@ The first version. It has not been published yet.
 - Checks after every step: finite values, no materially negative
   compartment, and relative population drift of at most `1e-9`. Values are
   never clipped.
-- Examples `basic_sir` and `basic_seir`, Criterion benchmarks, and
+- Examples `basic_sir` and `basic_seir`; teaching examples `outbreak_curve`
+  (one outbreak as CSV, one row per day) and `r0_sweep` (peak, timing and
+  final size across R0 values); Criterion benchmarks; and
   documentation of the models, the numerical method, the architecture, and
   the API.
