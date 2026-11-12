@@ -169,3 +169,21 @@ fn sir_returns_error_for_invalid_parameters_and_state() {
         SimulationError::InvalidPopulation
     );
 }
+
+#[test]
+fn sir_final_time_equals_requested_duration() {
+    // Durations that are not a whole number of steps, including two whose
+    // step count is sensitive to floating-point rounding.
+    for (duration, step) in [(10.0, 3.0), (7.3, 0.25), (1.0, 0.1), (609.6, 0.6)] {
+        let result = simulate_sir(PARAMETERS, INITIAL, settings(duration, step)).unwrap();
+        let times: Vec<f64> = result.trajectory.iter().map(|o| o.time_days).collect();
+
+        assert_eq!(times[0], 0.0);
+        assert_eq!(*times.last().unwrap(), duration);
+        assert!(
+            times.windows(2).all(|pair| pair[0] < pair[1]),
+            "times must strictly increase for duration {duration}"
+        );
+        assert_eq!(result.diagnostics.steps_executed, times.len() - 1);
+    }
+}
