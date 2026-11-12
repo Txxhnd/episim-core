@@ -1,5 +1,5 @@
 use crate::error::SimulationError;
-use crate::metrics::calculate_metrics;
+use crate::metrics::{basic_reproduction_number, calculate_metrics};
 use crate::result::SimulationResult;
 use crate::settings::SimulationSettings;
 use crate::simulation::driver::run_simulation;
@@ -126,6 +126,8 @@ pub fn simulate_seir(
             ("gamma_per_day", gamma_per_day),
         ],
     )?;
+    // Checked now so that an unusable R0 is reported before any integration.
+    basic_reproduction_number(beta_per_day, gamma_per_day)?;
 
     let output = run_simulation(
         [

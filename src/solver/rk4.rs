@@ -105,6 +105,13 @@ mod tests {
         assert_eq!(rk4_step([0.0], 1.0, |_| [f64::NAN]), stage("k1"));
         assert_eq!(rk4_step([0.0], 1.0, nan_above(0.25)), stage("k2"));
         assert_eq!(rk4_step([0.0], 1.0, nan_above(0.75)), stage("k4"));
+        // A slope of 2 at y = 0.5 moves the third stage, and only it, to y = 1.
+        let nan_at_one = |[y]: [f64; 1]| match y {
+            0.0 => [1.0],
+            0.5 => [2.0],
+            _ => [f64::NAN],
+        };
+        assert_eq!(rk4_step([0.0], 1.0, nan_at_one), stage("k3"));
         // A finite slope can still overflow the state the next stage is evaluated at.
         assert_eq!(rk4_step([f64::MAX], 2.0, |_| [f64::MAX]), stage("k2"));
     }

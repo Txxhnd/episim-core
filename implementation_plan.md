@@ -8,7 +8,9 @@
 
 **Tech Stack:** Rust 2024, MSRV 1.85, Cargo, `f64`, standard library, built-in test framework, Criterion as a development-only benchmark dependency.
 
-**Spec:** `docs/TECHNICAL_SPEC.md` (implements `docs/MVP_PRD.md`; product direction is in `docs/PRODUCT_VISION.md`).
+**Spec:** `TECHNICAL_SPEC.md` in the repository root (implements Part II of `Product_Vision_&_MVP_Product_Requirements_Document.md`; product direction is in Part I of the same file).
+
+**Status:** Tasks 1 to 12 are implemented. Tasks 1 to 10 were reviewed as a whole by an independent reviewer; Tasks 11 and 12 came out of that review. Where the implementation departed from the task text, the Execution Notes section near the end records what was done and why.
 
 ## Global Constraints
 
@@ -174,20 +176,20 @@ The derivative callback is evaluated at all four RK4 stages. Every stage derivat
 - Produces a compilable library crate named `episim-core`.
 - Exposes no simulation API yet.
 
-- [ ] **Step 1: Write the crate smoke test**
+- [x] **Step 1: Write the crate smoke test**
 
 Create `tests/crate_smoke_test.rs` with `use episim_core as _;` and a minimal `#[test] fn crate_compiles_as_library() {}`. This is a compile smoke test and must not require a placeholder public API.
 
-- [ ] **Step 2: Run the test to verify the scaffold is missing**
+- [x] **Step 2: Run the test to verify the scaffold is missing**
 
 Run: `cargo test --test crate_smoke_test`
 Expected: FAIL because the crate manifest/source has not yet been created.
 
-- [ ] **Step 3: Create the minimum crate scaffold**
+- [x] **Step 3: Create the minimum crate scaffold**
 
 Set package name `episim-core`, version `0.1.0`, edition `2024`, and `rust-version = "1.85"`. Add `#![forbid(unsafe_code)]`, `#![warn(missing_docs)]`, and `#![deny(missing_debug_implementations)]` to `src/lib.rs`. Add standard Rust build outputs to `.gitignore`.
 
-- [ ] **Step 4: Run the smoke test and baseline quality checks**
+- [x] **Step 4: Run the smoke test and baseline quality checks**
 
 Run: `cargo test --test crate_smoke_test`
 Expected: PASS.
@@ -195,7 +197,7 @@ Expected: PASS.
 Run: `cargo fmt --all -- --check && cargo clippy --all-targets -- -D warnings`
 Expected: PASS with no warnings.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add Cargo.toml src/lib.rs .gitignore tests/crate_smoke_test.rs
@@ -215,7 +217,7 @@ git commit -m "chore: initialize episim-core crate"
 - Produces `SimulationSettings::new`, `with_max_steps`, and getters exactly as listed in API Contracts.
 - Default maximum steps: `1_000_000`.
 
-- [ ] **Step 1: Write failing settings tests**
+- [x] **Step 1: Write failing settings tests**
 
 Add tests named:
 - `settings_accepts_positive_finite_duration_and_step`
@@ -227,21 +229,21 @@ Add tests named:
 
 Assert valid settings preserve the supplied values and invalid settings return the correct error variant.
 
-- [ ] **Step 2: Run targeted tests to verify failure**
+- [x] **Step 2: Run targeted tests to verify failure**
 
 Run: `cargo test --test validation_tests settings_`
 Expected: FAIL because settings and error types do not exist.
 
-- [ ] **Step 3: Implement settings and error types**
+- [x] **Step 3: Implement settings and error types**
 
 Implement private settings fields, validated constructors, getters, and these error variants: `InvalidParameter { name }`, `InvalidInitialState { compartment }`, `InvalidPopulation`, `InvalidDuration`, `InvalidTimeStep`, `InvalidMaximumSteps`, `StepLimitExceeded`, `TimeStepTooSmall`, `NonFiniteIntermediate { stage }`, `NonFiniteNumericalState { compartment }`, `NegativeCompartment { compartment }`, `PopulationConservationViolation`, `MetricOverflow`, and `AllocationFailure`. Implement `Display` manually to avoid a mandatory error-handling dependency. Add contextual numeric fields to error variants where they materially help diagnosis, without exposing internal implementation types.
 
-- [ ] **Step 4: Run settings tests**
+- [x] **Step 4: Run settings tests**
 
 Run: `cargo test --test validation_tests settings_`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/error.rs src/settings.rs src/lib.rs tests/validation_tests.rs
@@ -266,7 +268,7 @@ git commit -m "feat: add simulation settings and typed errors"
 - Model state and parameter structs derive `Debug`, `Clone`, `Copy`, and `PartialEq`.
 - Internal validation helpers return typed errors and calculate a finite positive initial population.
 
-- [ ] **Step 1: Write failing model validation tests**
+- [x] **Step 1: Write failing model validation tests**
 
 Add tests:
 - `sir_accepts_zero_beta_and_positive_gamma`
@@ -282,22 +284,22 @@ Add tests:
 
 The overflow tests must use individually finite compartment values whose sum becomes non-finite.
 
-- [ ] **Step 2: Run targeted tests to verify failure**
+- [x] **Step 2: Run targeted tests to verify failure**
 
 Run: `cargo test --test validation_tests sir_`
 Run: `cargo test --test validation_tests seir_`
 Expected: FAIL because model types and validators are not implemented.
 
-- [ ] **Step 3: Implement model types and validators**
+- [x] **Step 3: Implement model types and validators**
 
 Implement the public structs and internal validation functions. Validate each compartment before summation; use a finite check on the summed population and require `N0 > 0`. Do not place simulation logic in this task. Export the public structs from the crate root only after their documentation is complete.
 
-- [ ] **Step 4: Run validation tests**
+- [x] **Step 4: Run validation tests**
 
 Run: `cargo test --test validation_tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/validation.rs src/models src/lib.rs tests/validation_tests.rs
@@ -316,7 +318,7 @@ git commit -m "feat: add epidemiological model types and validation"
 - `F: Fn([f64; N]) -> [f64; N]`.
 - No heap allocation in one RK4 step.
 
-- [ ] **Step 1: Write failing RK4 reference tests**
+- [x] **Step 1: Write failing RK4 reference tests**
 
 Add tests:
 - `rk4_integrates_scalar_exponential_decay_with_fourth_order_accuracy`
@@ -328,21 +330,21 @@ Add tests:
 
 For exponential decay, compare against `exp(-t)` at a fixed endpoint and verify an error-reduction ratio consistent with fourth-order convergence over selected sufficiently small steps.
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run: `cargo test --test rk4_tests`
 Expected: FAIL because `rk4_step` is not implemented.
 
-- [ ] **Step 3: Implement `rk4_step`**
+- [x] **Step 3: Implement `rk4_step`**
 
 Calculate `k1`, `k2`, `k3`, and `k4` using fixed-size arrays. Check every intermediate state, derivative array, and final value for finiteness. Return a typed numerical error rather than propagating NaN or infinity.
 
-- [ ] **Step 4: Run RK4 tests**
+- [x] **Step 4: Run RK4 tests**
 
 Run: `cargo test --test rk4_tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/solver tests/rk4_tests.rs
@@ -365,7 +367,7 @@ git commit -m "feat: implement fixed-step rk4 integrator"
 - Internal `run_simulation<const N: usize, S, D, C>(initial: [f64; N], population: f64, settings: SimulationSettings, derivative: D, to_state: C, compartment_names: [&'static str; N]) -> Result<SimulationOutput<S>, SimulationError>` where `D: Fn([f64; N]) -> [f64; N]` and `C: Fn([f64; N]) -> S`.
 - The driver does not calculate epidemiological metrics; Task 6 adds metrics and the public `SimulationResult<S>` wrapper.
 
-- [ ] **Step 1: Write failing driver and diagnostics tests**
+- [x] **Step 1: Write failing driver and diagnostics tests**
 
 Add tests:
 - `driver_records_initial_state`
@@ -379,21 +381,21 @@ Add tests:
 - `driver_counts_tolerated_negative_roundoff_without_clipping`
 - `driver_maps_trajectory_reservation_failure_to_typed_error` (use an injected reservation abstraction or a narrowly scoped test seam; do not attempt to exhaust system memory in a test).
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run: `cargo test --test numerical_tests`
 Expected: FAIL because result and driver types are not implemented.
 
-- [ ] **Step 3: Implement result structures and driver**
+- [x] **Step 3: Implement result structures and driver**
 
 Reserve `required_steps + 1` observations using checked arithmetic and `try_reserve_exact`. Calculate the required number of steps without an unchecked float-to-integer cast: reject a non-finite duration/step ratio or any ratio exceeding `max_steps` before converting it, then use checked arithmetic for the observation capacity. Enforce the configured step limit before integration. Advance time by `min(step_days, duration_days - current_time)` and detect a step that cannot advance the floating-point clock. Check finiteness, compartment negativity tolerance, and population drift after each accepted step. Do not alter tolerated negative values; count them.
 
-- [ ] **Step 4: Run numerical diagnostics tests**
+- [x] **Step 4: Run numerical diagnostics tests**
 
 Run: `cargo test --test numerical_tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/result.rs src/simulation src/lib.rs tests/numerical_tests.rs
@@ -412,7 +414,7 @@ git commit -m "feat: add shared simulation driver and diagnostics"
 - `EpidemicMetrics` and `SimulationResult<S>` exactly as defined in API Contracts.
 - Internal `calculate_metrics<S, FS, FI>(trajectory: &[Observation<S>], initial_population: f64, beta_per_day: f64, gamma_per_day: f64, susceptible_of: FS, infectious_of: FI) -> Result<EpidemicMetrics, SimulationError>` where `FS: Fn(&S) -> f64` and `FI: Fn(&S) -> f64`.
 
-- [ ] **Step 1: Write failing metric tests**
+- [x] **Step 1: Write failing metric tests**
 
 Add tests:
 - `metrics_calculate_basic_reproduction_number`
@@ -426,21 +428,21 @@ Add tests:
 
 Use small hand-constructed trajectories to test metric calculations independently of numerical integration.
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run: `cargo test --test metrics_tests`
 Expected: FAIL because metrics and public result types are not implemented.
 
-- [ ] **Step 3: Implement result and metric structures**
+- [x] **Step 3: Implement result and metric structures**
 
 Implement `EpidemicMetrics` and `SimulationResult<S>`. Calculate `R0 = beta / gamma` and reject non-finite results. Calculate peak infectious value from recorded observations; if there is a tie, retain the earliest observation. Calculate cumulative infections at the final simulation time as `S(0) - S(T)` and cumulative incidence fraction as that value divided by `N0`. Validate that metric inputs and outputs are finite. Do not add an `Rt` field.
 
-- [ ] **Step 4: Run metric tests**
+- [x] **Step 4: Run metric tests**
 
 Run: `cargo test --test metrics_tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/metrics.rs src/result.rs src/lib.rs tests/metrics_tests.rs
@@ -459,7 +461,7 @@ git commit -m "feat: add epidemiological result metrics"
 - SIR compartment array order is `[susceptible, infected, recovered]`.
 - Infectious metric accessor returns `state.infected`; susceptible accessor returns `state.susceptible`.
 
-- [ ] **Step 1: Write failing SIR integration tests**
+- [x] **Step 1: Write failing SIR integration tests**
 
 Add tests:
 - `sir_returns_initial_and_final_observations`
@@ -471,21 +473,21 @@ Add tests:
 
 Use beta = 0 and gamma > 0 as an analytical reference scenario. Verify `S(t) = S0`, `I(t) = I0 * exp(-gamma * t)`, and `R(t) = R0_initial + I0 - I(t)` within an explicitly chosen numerical tolerance.
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run: `cargo test --test sir_tests`
 Expected: FAIL because `simulate_sir` is not implemented.
 
-- [ ] **Step 3: Implement the SIR wrapper and derivative**
+- [x] **Step 3: Implement the SIR wrapper and derivative**
 
 Convert `SirState` to `[f64; 3]`, compute the frequency-dependent infection flow and recovery flow, call `run_simulation` with compartment names `["susceptible", "infected", "recovered"]`, then calculate metrics from the returned trajectory and assemble `SimulationResult<SirState>`. Re-export `simulate_sir`, `SirParameters`, and `SirState` from the crate root.
 
-- [ ] **Step 4: Run SIR tests**
+- [x] **Step 4: Run SIR tests**
 
 Run: `cargo test --test sir_tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/models/sir.rs src/lib.rs tests/sir_tests.rs
@@ -504,7 +506,7 @@ git commit -m "feat: implement deterministic sir simulation"
 - SEIR compartment array order is `[susceptible, exposed, infected, recovered]`.
 - Infectious metric accessor returns `state.infected`; susceptible accessor returns `state.susceptible`.
 
-- [ ] **Step 1: Write failing SEIR integration tests**
+- [x] **Step 1: Write failing SEIR integration tests**
 
 Add tests:
 - `seir_returns_initial_and_final_observations`
@@ -516,21 +518,21 @@ Add tests:
 
 For beta = 0 and sigma != gamma, compare exposed and infected trajectories against the analytical solution in the technical specification.
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run: `cargo test --test seir_tests`
 Expected: FAIL because `simulate_seir` is not implemented.
 
-- [ ] **Step 3: Implement the SEIR wrapper and derivative**
+- [x] **Step 3: Implement the SEIR wrapper and derivative**
 
 Convert `SeirState` to `[f64; 4]`, implement infection, exposed progression, and recovery flows, call `run_simulation` with compartment names `["susceptible", "exposed", "infected", "recovered"]`, then calculate metrics and assemble `SimulationResult<SeirState>`. Re-export `simulate_seir`, `SeirParameters`, and `SeirState` from the crate root.
 
-- [ ] **Step 4: Run SEIR tests**
+- [x] **Step 4: Run SEIR tests**
 
 Run: `cargo test --test seir_tests`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/models/seir.rs src/lib.rs tests/seir_tests.rs
@@ -549,7 +551,7 @@ git commit -m "feat: implement deterministic seir simulation"
 - No public API changes.
 - Tests consume `simulate_sir` and `simulate_seir` only.
 
-- [ ] **Step 1: Write convergence and edge-case tests**
+- [x] **Step 1: Write convergence and edge-case tests**
 
 Add tests:
 - `sir_timestep_refinement_reduces_reference_error`
@@ -562,21 +564,21 @@ Add tests:
 
 Use independently calculated analytical reference scenarios where possible. For nontrivial scenarios, compare against a much finer-step reference and document that it is a numerical reference, not an exact solution. Assert a reduction factor of at least 8 for the designated smooth convergence fixtures when halving the timestep, while avoiding the floating-point error floor.
 
-- [ ] **Step 2: Run the new tests to verify failure where appropriate**
+- [x] **Step 2: Run the new tests to verify failure where appropriate**
 
 Run: `cargo test --test convergence_tests`
 Expected: Initial convergence assertions may expose tolerance or solver defects; do not weaken thresholds without documenting numerical evidence.
 
-- [ ] **Step 3: Correct implementation defects only**
+- [x] **Step 3: Correct implementation defects only**
 
 Fix solver, time advancement, model derivative, or diagnostic defects revealed by the tests. Do not clip invalid compartment values or change the stated model equations to make tests pass.
 
-- [ ] **Step 4: Run all functional and numerical tests**
+- [x] **Step 4: Run all functional and numerical tests**
 
 Run: `cargo test --all-targets`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests
@@ -601,24 +603,24 @@ git commit -m "test: verify numerical accuracy and convergence"
 - Criterion is a development-only dependency.
 - No production API changes.
 
-- [ ] **Step 1: Write executable example checks**
+- [x] **Step 1: Write executable example checks**
 
 Create both examples and ensure each prints a small summary of model configuration, peak infectious population, peak time, cumulative infections, and numerical diagnostics.
 
-- [ ] **Step 2: Run examples to verify the public workflow**
+- [x] **Step 2: Run examples to verify the public workflow**
 
 Run: `cargo check --examples`
 Expected: FAIL until examples and all required public re-exports are correctly connected; then PASS.
 
-- [ ] **Step 3: Write documentation**
+- [x] **Step 3: Write documentation**
 
 Document equations, units, model assumptions, frequency-dependent transmission, RK4 stages, fixed-step limitations, negative-state behavior, result metric definitions, and a downstream quick start. Clearly state that the library is a simulation engine, not a calibrated real-world forecasting product.
 
-- [ ] **Step 4: Add benchmark workloads**
+- [x] **Step 4: Add benchmark workloads**
 
 Add Criterion as a dev-dependency and configure `[[bench]] name = "simulation_bench"` with `harness = false`. Benchmark SIR and SEIR at 10,000, 100,000, and 1,000,000 steps using release mode. Record compiler, CPU, operating system, and workload parameters with the baseline; do not invent absolute runtime targets.
 
-- [ ] **Step 5: Run full quality and packaging checks**
+- [x] **Step 5: Run full quality and packaging checks**
 
 Run:
 
@@ -634,7 +636,7 @@ cargo package
 
 Expected: all commands pass. Resolve warnings and packaging omissions before release.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add Cargo.toml Cargo.lock README.md docs examples benches
@@ -660,7 +662,7 @@ Added after the final review of Tasks 1 to 10. The review found that a step too 
 - `simulate_sir` checks `beta_per_day` and `gamma_per_day`; `simulate_seir` checks `beta_per_day`, `sigma_per_day`, and `gamma_per_day`. The check runs after parameter and initial-state validation and before integration.
 - No other public API changes.
 
-- [ ] **Step 1: Write failing stability tests**
+- [x] **Step 1: Write failing stability tests**
 
 Add tests:
 - `sir_rejects_step_too_large_for_stable_integration`
@@ -668,16 +670,16 @@ Add tests:
 
 For each rate parameter, assert that a product of 2.786 with the step returns `TimeStepTooLarge` naming that parameter, and that the same rate with half the step runs. Pin the boundary: a product of exactly 2.785 must not return `TimeStepTooLarge`. In SIR with beta = 0 that run succeeds and the infected decay. In SEIR with beta = 0 and sigma at the limit the run passes the guard and is then stopped with `NegativeCompartment { compartment: "infected" }`, which is an acceptable outcome because it is an error and not a wrong trajectory.
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run: `cargo test --no-fail-fast --test sir_tests --test seir_tests too_large`
 Expected: FAIL because the variant does not exist; once the variant alone is added, FAIL because the unstable configurations return `Ok`.
 
-- [ ] **Step 3: Implement the guard**
+- [x] **Step 3: Implement the guard**
 
 Add the variant and its `Display` text, add `stable_step`, and call it from both public functions. Update the `# Errors` documentation of both functions, and describe the guard and its limits in `README.md`, `docs/numerical_methods.md`, and `docs/api_design.md`. State clearly that it is a stability guard and does not detect inaccuracy.
 
-- [ ] **Step 4: Run all quality checks**
+- [x] **Step 4: Run all quality checks**
 
 Run: `cargo test`
 Expected: PASS.
@@ -685,12 +687,93 @@ Expected: PASS.
 Run: `cargo fmt --all -- --check && cargo clippy --all-targets --all-features -- -D warnings`
 Expected: PASS with no warnings.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/error.rs src/validation.rs src/models tests/sir_tests.rs tests/seir_tests.rs README.md docs
 git commit -m "feat: reject timesteps beyond the rk4 stability limit"
 ```
+
+## Task 12: Release Hardening from the Final Review
+
+The final review of Tasks 1 to 10 left a list of minor findings. This task closes the ones that need no owner decision. Choosing a licence stays with the project owner.
+
+**Files:**
+- Modify: `src/error.rs`
+- Modify: `src/metrics.rs`
+- Modify: `src/models/sir.rs`
+- Modify: `src/models/seir.rs`
+- Modify: `src/simulation/driver.rs`
+- Modify: `src/solver/rk4.rs`
+- Modify: `tests/sir_tests.rs`
+- Modify: `tests/seir_tests.rs`
+- Modify: `tests/numerical_tests.rs`
+- Create: `CHANGELOG.md`
+- Modify: `Cargo.toml`
+
+**Interfaces:**
+- `SimulationError` becomes `#[non_exhaustive]`, matching the documented promise that it may gain variants.
+- Internal `basic_reproduction_number(beta_per_day: f64, gamma_per_day: f64) -> Result<f64, SimulationError>` in `src/metrics.rs`, used by `calculate_metrics` and called by both public functions before integration.
+- No other API changes.
+
+- [x] **Step 1: Write the tests**
+
+Add tests:
+- `sir_reports_metric_overflow_before_integrating` and `seir_reports_metric_overflow_before_integrating`: with an overflowing `beta / gamma` and settings that would exceed the step limit, the error is `MetricOverflow`, not `StepLimitExceeded`.
+- `sir_surfaces_step_limit_clock_and_population_errors` and `seir_surfaces_step_limit_clock_and_population_errors`: `StepLimitExceeded`, `TimeStepTooSmall` (64-bit targets), and an overflowed-sum `InvalidPopulation` reach the caller through the public functions.
+- `driver_rejects_non_finite_accepted_state`: `check_state` returns `NonFiniteNumericalState` naming the compartment.
+- `driver_applies_negative_tolerance_at_its_boundary`: a value of exactly `-64 * EPSILON * max(N0, 1)` is accepted and counted, a value just below it is rejected, for a population above 1 and one below 1.
+- `driver_applies_drift_threshold_near_its_boundary`: a relative drift of `0.9e-9` is accepted and `1.1e-9` is rejected.
+
+Extend `rk4_rejects_non_finite_intermediate_stage` with a case that fails at `k3`. In `metrics_and_diagnostics_remain_finite_for_reference_scenarios`, replace the assertion `peak_infectious >= 10.0`, which cannot fail, with one that requires growth when beta is positive and an unchanged peak at day zero when beta is zero.
+
+- [x] **Step 2: Run the tests**
+
+Run: `cargo test`
+Expected: the two `*_reports_metric_overflow_before_integrating` tests FAIL with `StepLimitExceeded`. The other new tests describe behaviour that already exists and pass; prove each can fail by breaking the code it covers, then restore the code.
+
+- [x] **Step 3: Implement**
+
+Extract `basic_reproduction_number` and call it in both public functions after the stability check and before `run_simulation`. Add `#[non_exhaustive]` to `SimulationError`. Add `CHANGELOG.md` with a 0.1.0 entry and include it in the package.
+
+- [x] **Step 4: Run all quality checks**
+
+Run:
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+cargo doc --no-deps --all-features
+cargo package --list
+```
+
+Expected: all pass.
+
+- [x] **Step 5: Commit**
+
+```bash
+git add src tests docs CHANGELOG.md Cargo.toml implementation_plan.md
+git commit -m "test: harden error paths and boundaries for release"
+```
+
+---
+
+## Execution Notes
+
+These record where the implementation of Tasks 1 to 11 departed from the task text above. The task text is kept as written.
+
+- **Document locations.** The specification, product requirements, and this plan live in the repository root, not under `docs/`.
+- **Tests of internal code (Tasks 3 to 6).** The plan placed them in `tests/validation_tests.rs`, `tests/rk4_tests.rs`, `tests/numerical_tests.rs`, and `tests/metrics_tests.rs`. Integration tests cannot see `pub(crate)` items, and the specification keeps the solver, driver, validators, and metric calculation private. Those tests are unit tests inside `src/models/sir.rs`, `src/models/seir.rs`, `src/solver/rk4.rs`, `src/simulation/driver.rs`, and `src/metrics.rs`, with the test names the plan lists. Run them with `cargo test --lib`. `tests/rk4_tests.rs` and `tests/metrics_tests.rs` do not exist; `tests/numerical_tests.rs` was created in Task 9 with public-API tests.
+- **Error variants (Task 2).** No extra numeric context fields were added. `stage` and `parameter` are `&'static str`.
+- **Solver errors (Task 4).** A non-finite step returns `InvalidTimeStep`. A non-finite stage input or slope returns `NonFiniteIntermediate` with stage `"k1"` to `"k4"`; a non-finite combined result uses stage `"final"`, because the solver has no compartment names.
+- **Derives (Tasks 5 and 6).** `Observation`, `SimulationDiagnostics`, and `EpidemicMetrics` also derive `Copy`, as specification section 5.1 asks.
+- **Time handling (Task 5).** Observation times are `index * step_days`, with the last pinned to the duration, not a running sum. The step count is `duration / step` reduced by four ulps and then rounded up, so a duration that is a whole number of steps does not gain a step of rounding-error length (2.7 / 0.3 gives 9 steps). `TimeStepTooSmall` is detected before integration as `duration + step == duration`, after the step-limit check. The allocation-failure test calls the reservation function with a capacity of `usize::MAX`.
+- **Metrics (Task 6).** An empty trajectory returns `MetricOverflow`; it cannot occur through the public API.
+- **Model tests (Tasks 7 and 8).** `sir_first_step_matches_model_equations` and `seir_first_step_matches_model_equations` were added after the final review, because no listed test would have caught a wrong transmission term.
+- **Convergence (Task 9).** The fixtures use the nonlinear models against a run at 1/64 day. Measured error-reduction factors: 13.9 and 14.9 for SIR, 15.6 and 15.8 for SEIR.
+- **Release work (Task 10).** Criterion 0.7 is used with default features off except `cargo_bench_support`. `Cargo.toml` has an `include` list so only the crate and its documentation are packaged. The benchmark baseline is in `docs/architecture.md`; its three workloads use different timesteps so that each covers 120 to 200 simulated days. The Rust examples in `README.md` and `docs/api_design.md` run as doctests. No licence has been chosen.
+- **Self-review numbering.** In the checklist below, the model equations are Tasks 7 and 8 and the non-finite `R0` test is Task 6.
 
 ---
 
@@ -712,6 +795,7 @@ git commit -m "feat: reject timesteps beyond the rk4 stability limit"
 - Performance benchmarks: Task 10.
 - Package verification: Task 10.
 - Timestep stability guard: Task 11.
+- Error-path, boundary, and release-note hardening: Task 12.
 
 ### Type consistency
 

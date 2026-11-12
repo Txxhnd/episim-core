@@ -1,7 +1,11 @@
 use std::fmt;
 
 /// Errors returned by simulation configuration and execution.
+///
+/// New variants may be added in later versions, so a `match` on this type
+/// needs a wildcard arm.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum SimulationError {
     /// An epidemiological parameter is non-finite or outside its valid range.
     InvalidParameter {

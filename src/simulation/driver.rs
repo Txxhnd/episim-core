@@ -338,6 +338,69 @@ mod tests {
         assert_eq!(output.trajectory[2].state[0], -2e-12);
     }
 
+    /// Runs the per-state checks alone and returns the tolerated-negative count.
+    fn check(state: [f64; 2], population: f64) -> Result<usize, SimulationError> {
+        let mut diagnostics = SimulationDiagnostics {
+            steps_executed: 0,
+            maximum_absolute_population_drift: 0.0,
+            maximum_relative_population_drift: 0.0,
+            tolerated_negative_value_count: 0,
+        };
+        check_state(&state, &["a", "b"], population, &mut diagnostics)?;
+        Ok(diagnostics.tolerated_negative_value_count)
+    }
+
+    #[test]
+    fn driver_rejects_non_finite_accepted_state() {
+        // The solver rejects non-finite results itself, so this check is
+        // only reachable directly.
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                check([100.0, value], 100.0),
+                Err(SimulationError::NonFiniteNumericalState { compartment: "b" }),
+                "value {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn driver_applies_negative_tolerance_at_its_boundary() {
+        // The tolerance is 64 * EPSILON * max(N0, 1): it scales with a
+        // population above 1 and stops shrinking below 1.
+        let cases = [
+            (1000.0, 64.0 * f64::EPSILON * 1000.0),
+            (0.5, 64.0 * f64::EPSILON),
+        ];
+        for (population, tolerance) in cases {
+            assert_eq!(
+                check([population + tolerance, -tolerance], population),
+                Ok(1),
+                "population {population}"
+            );
+            let beyond = tolerance * 1.000001;
+            assert_eq!(
+                check([population + beyond, -beyond], population),
+                Err(SimulationError::NegativeCompartment { compartment: "b" }),
+                "population {population}"
+            );
+        }
+    }
+
+    #[test]
+    fn driver_applies_drift_threshold_near_its_boundary() {
+        // In a population of 1000 a relative drift of 1e-9 is 1e-6 individuals.
+        for accepted in [1000.0 + 0.9e-6, 1000.0 - 0.9e-6] {
+            assert_eq!(check([accepted, 0.0], 1000.0), Ok(0), "total {accepted}");
+        }
+        for rejected in [1000.0 + 1.1e-6, 1000.0 - 1.1e-6] {
+            assert_eq!(
+                check([rejected, 0.0], 1000.0),
+                Err(SimulationError::PopulationConservationViolation),
+                "total {rejected}"
+            );
+        }
+    }
+
     #[test]
     fn driver_maps_trajectory_reservation_failure_to_typed_error() {
         // A capacity of usize::MAX observations overflows the size computation,

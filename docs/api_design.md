@@ -65,7 +65,7 @@ pub fn simulate_seir(
 | Invalid initial population | `InvalidInitialState { compartment }`, `InvalidPopulation` | A compartment is negative or not finite, or the total is zero or not finite. |
 | Numerical instability | `NonFiniteIntermediate { stage }`, `NonFiniteNumericalState { compartment }`, `NegativeCompartment { compartment }`, `PopulationConservationViolation` | The integration produced a value the library will not accept. |
 | Resource limits | `StepLimitExceeded`, `TimeStepTooSmall`, `AllocationFailure` | The run needs more steps than allowed, a step too small for `f64` time, or more memory than could be reserved. |
-| Invalid metrics | `MetricOverflow` | A metric is not finite, for example `beta / gamma` with an extremely small `gamma`. |
+| Invalid metrics | `MetricOverflow` | A metric is not finite, for example `beta / gamma` with an extremely small `gamma`. That case is reported before integration starts. |
 
 `NonFiniteNumericalState` is the error for a non-finite value in an accepted
 state. The solver checks its own output first, so in the current version a
@@ -90,8 +90,8 @@ match simulate_sir(parameters, initial_state, settings) {
 ## Stability
 
 This is a 0.1 release. The public API may still change before 1.0.
-`SimulationError` may gain variants or diagnostic fields, so match on it
-with a wildcard arm.
+`SimulationError` is marked `#[non_exhaustive]`: it may gain variants, so
+the compiler requires a wildcard arm when you match on it.
 
 Not part of the API in this version: an effective reproduction number
 (`Rt`), serialization, and user-defined models.

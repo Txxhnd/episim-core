@@ -26,6 +26,20 @@ pub struct EpidemicMetrics {
     pub cumulative_incidence_fraction: f64,
 }
 
+/// Theoretical `R0 = beta / gamma`, or [`SimulationError::MetricOverflow`] if
+/// the quotient is not finite.
+pub(crate) fn basic_reproduction_number(
+    beta_per_day: f64,
+    gamma_per_day: f64,
+) -> Result<f64, SimulationError> {
+    let value = beta_per_day / gamma_per_day;
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(SimulationError::MetricOverflow)
+    }
+}
+
 /// Derives the metrics from a recorded trajectory, returning
 /// [`SimulationError::MetricOverflow`] if any input or result is not finite.
 pub(crate) fn calculate_metrics<S, FS, FI>(
@@ -65,7 +79,7 @@ where
     let cumulative_infections_since_start =
         finite(susceptible_of(&first.state) - susceptible_of(&last.state))?;
     Ok(EpidemicMetrics {
-        basic_reproduction_number: finite(beta_per_day / gamma_per_day)?,
+        basic_reproduction_number: basic_reproduction_number(beta_per_day, gamma_per_day)?,
         peak_infectious,
         peak_infectious_time_days,
         cumulative_infections_since_start,

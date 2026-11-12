@@ -73,6 +73,7 @@ fn assert_finite_and_plausible(
     metrics: EpidemicMetrics,
     diagnostics: SimulationDiagnostics,
     observations: usize,
+    infectious_must_grow: bool,
 ) {
     for value in [
         metrics.basic_reproduction_number,
@@ -85,7 +86,14 @@ fn assert_finite_and_plausible(
     ] {
         assert!(value.is_finite(), "{metrics:?} {diagnostics:?}");
     }
-    assert!(metrics.peak_infectious >= 10.0, "{metrics:?}");
+    // Every scenario starts with 10 infected.
+    if infectious_must_grow {
+        assert!(metrics.peak_infectious > 10.0, "{metrics:?}");
+        assert!(metrics.peak_infectious_time_days > 0.0, "{metrics:?}");
+    } else {
+        assert_eq!(metrics.peak_infectious, 10.0);
+        assert_eq!(metrics.peak_infectious_time_days, 0.0);
+    }
     assert!(
         (0.0..=1.0).contains(&metrics.cumulative_incidence_fraction),
         "{metrics:?}"
@@ -109,7 +117,13 @@ fn metrics_and_diagnostics_remain_finite_for_reference_scenarios() {
             settings(step),
         )
         .unwrap();
-        assert_finite_and_plausible(sir.metrics, sir.diagnostics, sir.trajectory.len());
+        // Without transmission the SIR infected can only recover.
+        assert_finite_and_plausible(
+            sir.metrics,
+            sir.diagnostics,
+            sir.trajectory.len(),
+            beta_per_day > 0.0,
+        );
 
         let seir = simulate_seir(
             SeirParameters {
@@ -126,6 +140,7 @@ fn metrics_and_diagnostics_remain_finite_for_reference_scenarios() {
             settings(step),
         )
         .unwrap();
-        assert_finite_and_plausible(seir.metrics, seir.diagnostics, seir.trajectory.len());
+        // The initially exposed become infectious even without transmission.
+        assert_finite_and_plausible(seir.metrics, seir.diagnostics, seir.trajectory.len(), true);
     }
 }

@@ -272,3 +272,51 @@ fn seir_rejects_step_too_large_for_stable_integration() {
     // The same rate is fine with a smaller step.
     assert!(run(0.0, 2.786, 0.1, 0.5).is_ok());
 }
+
+#[test]
+fn seir_reports_metric_overflow_before_integrating() {
+    // beta / gamma overflows to infinity, and these settings would also need
+    // ten billion steps. The parameter problem is reported first, without
+    // running or sizing the simulation.
+    let parameters = SeirParameters {
+        beta_per_day: 10.0,
+        sigma_per_day: 0.2,
+        gamma_per_day: f64::MIN_POSITIVE,
+    };
+    assert_eq!(
+        simulate_seir(parameters, INITIAL, settings(1e9, 0.1)).unwrap_err(),
+        SimulationError::MetricOverflow
+    );
+}
+
+#[test]
+fn seir_surfaces_step_limit_clock_and_population_errors() {
+    let limited = settings(10.0, 1.0).with_max_steps(9).unwrap();
+    assert_eq!(
+        simulate_seir(PARAMETERS, INITIAL, limited).unwrap_err(),
+        SimulationError::StepLimitExceeded
+    );
+
+    // Near 1e17 adjacent f64 values are 16 apart, so a step of 1 cannot
+    // advance the clock. Only a 64-bit step limit can be raised this far.
+    #[cfg(target_pointer_width = "64")]
+    {
+        let stalled = settings(1e17, 1.0).with_max_steps(usize::MAX).unwrap();
+        assert_eq!(
+            simulate_seir(PARAMETERS, INITIAL, stalled).unwrap_err(),
+            SimulationError::TimeStepTooSmall
+        );
+    }
+
+    // Each compartment is finite; only their sum overflows.
+    let overflowed = SeirState {
+        susceptible: f64::MAX,
+        exposed: 0.0,
+        infected: f64::MAX,
+        recovered: 0.0,
+    };
+    assert_eq!(
+        simulate_seir(PARAMETERS, overflowed, settings(10.0, 1.0)).unwrap_err(),
+        SimulationError::InvalidPopulation
+    );
+}
