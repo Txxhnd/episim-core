@@ -1,6 +1,6 @@
 use crate::accuracy::{StepErrorEstimate, estimate_step_error};
 use crate::error::SimulationError;
-use crate::metrics::{basic_reproduction_number, calculate_metrics};
+use crate::metrics::{basic_reproduction_number, calculate_metrics, effective_reproduction_number};
 use crate::result::SimulationResult;
 use crate::settings::SimulationSettings;
 use crate::simulation::driver::run_simulation;
@@ -40,6 +40,36 @@ impl SeirParameters {
         validation::non_negative_rate("beta_per_day", self.beta_per_day)?;
         validation::positive_rate("sigma_per_day", self.sigma_per_day)?;
         validation::positive_rate("gamma_per_day", self.gamma_per_day)
+    }
+
+    /// Model-derived effective reproduction number in `state`: `R0 * S / N`,
+    /// where `N` is the total of `state`.
+    ///
+    /// It is the average number of people one infected person infects while a
+    /// fraction `S / N` of the population is still susceptible. Because
+    /// `d(E + I)/dt = gamma * I * (effective R - 1)`, the exposed and infected
+    /// together grow while it is above 1 and decline while it is below 1. For
+    /// a state returned by [`simulate_seir`], `N` equals the initial population
+    /// to within the population drift tolerance of `1e-9`.
+    ///
+    /// This is a property of the model. It is not an estimate of the effective
+    /// reproduction number `Rt` that public-health agencies infer from case
+    /// data.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SimulationError::InvalidParameter`] for an invalid rate,
+    /// [`SimulationError::InvalidPopulation`] if the total of `state` is not
+    /// finite and positive, and [`SimulationError::MetricOverflow`] if the
+    /// result is not finite.
+    pub fn effective_reproduction_number(&self, state: &SeirState) -> Result<f64, SimulationError> {
+        self.validate()?;
+        let r0 = basic_reproduction_number(self.beta_per_day, self.gamma_per_day)?;
+        effective_reproduction_number(
+            r0,
+            state.susceptible,
+            state.susceptible + state.exposed + state.infected + state.recovered,
+        )
     }
 }
 
@@ -170,6 +200,7 @@ pub fn simulate_seir(
         gamma_per_day,
         |state| state.susceptible,
         |state| state.infected,
+        initial_state.exposed + initial_state.infected,
     )?;
     Ok(SimulationResult {
         trajectory: output.trajectory,

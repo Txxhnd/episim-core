@@ -415,3 +415,84 @@ fn sir_step_error_estimate_follows_the_recording_interval_and_reports_errors() {
         SimulationError::StepLimitExceeded
     );
 }
+
+#[test]
+fn sir_final_size_matches_a_long_simulation() {
+    let initial = SirState {
+        susceptible: 985.0,
+        infected: 10.0,
+        recovered: 5.0,
+    };
+    let result = simulate_sir(PARAMETERS, initial, settings(400.0, 0.1)).unwrap();
+    let metrics = result.metrics;
+    // By day 400 the epidemic is over, so the simulated incidence has reached
+    // the limit the final size equation predicts.
+    assert!(
+        (metrics.cumulative_incidence_fraction - metrics.final_size_fraction).abs() < 1e-6,
+        "simulated {} vs final size {}",
+        metrics.cumulative_incidence_fraction,
+        metrics.final_size_fraction
+    );
+    // R0 = 3, so two thirds of the population must be immune.
+    assert!((metrics.herd_immunity_threshold - 2.0 / 3.0).abs() < 1e-12);
+}
+
+#[test]
+fn sir_effective_reproduction_number_is_one_at_the_infected_peak() {
+    let result = simulate_sir(PARAMETERS, INITIAL, settings(160.0, 0.05)).unwrap();
+    let effective = |state: &SirState| PARAMETERS.effective_reproduction_number(state).unwrap();
+
+    // R0 = 3 and 99% of the population starts susceptible.
+    assert!((effective(&result.trajectory[0].state) - 2.97).abs() < 1e-9);
+    // dI/dt = gamma * I * (effective R - 1), so the infected peak where it is 1.
+    let peak = result
+        .trajectory
+        .iter()
+        .find(|o| o.time_days == result.metrics.peak_infectious_time_days)
+        .unwrap();
+    let at_peak = effective(&peak.state);
+    assert!(
+        (at_peak - 1.0).abs() < 0.01,
+        "effective R at the peak {at_peak}"
+    );
+    assert!(effective(&result.trajectory.last().unwrap().state) < 1.0);
+}
+
+#[test]
+fn sir_effective_reproduction_number_rejects_invalid_input() {
+    let no_recovery = SirParameters {
+        gamma_per_day: 0.0,
+        ..PARAMETERS
+    };
+    assert_eq!(
+        no_recovery
+            .effective_reproduction_number(&INITIAL)
+            .unwrap_err(),
+        SimulationError::InvalidParameter {
+            name: "gamma_per_day"
+        }
+    );
+
+    let empty = SirState {
+        susceptible: 0.0,
+        infected: 0.0,
+        recovered: 0.0,
+    };
+    assert_eq!(
+        PARAMETERS
+            .effective_reproduction_number(&empty)
+            .unwrap_err(),
+        SimulationError::InvalidPopulation
+    );
+
+    let overflowing = SirParameters {
+        beta_per_day: 10.0,
+        gamma_per_day: f64::MIN_POSITIVE,
+    };
+    assert_eq!(
+        overflowing
+            .effective_reproduction_number(&INITIAL)
+            .unwrap_err(),
+        SimulationError::MetricOverflow
+    );
+}

@@ -144,3 +144,62 @@ fn metrics_and_diagnostics_remain_finite_for_reference_scenarios() {
         assert_finite_and_plausible(seir.metrics, seir.diagnostics, seir.trajectory.len(), true);
     }
 }
+
+#[test]
+fn sir_and_seir_follow_the_exact_susceptible_recovered_relation() {
+    // In both models dS/dt = -beta * S * I / N and dR/dt = gamma * I, so
+    // dS/dR = -R0 * S / N and every exact solution satisfies
+    // S(t) = S(0) * exp(-R0 * (R(t) - R(0)) / N). Unlike the convergence
+    // tests, this is an exact reference for the epidemic phase.
+    let relation_error = |states: &[(f64, f64)], r0: f64, population: f64| {
+        let (s0, r_start) = states[0];
+        states
+            .iter()
+            .map(|&(s, r)| (s - s0 * (-r0 * (r - r_start) / population).exp()).abs())
+            .fold(0.0, f64::max)
+    };
+
+    let sir = simulate_sir(
+        SirParameters {
+            beta_per_day: 0.3,
+            gamma_per_day: 0.1,
+        },
+        SirState {
+            susceptible: 985.0,
+            infected: 10.0,
+            recovered: 5.0,
+        },
+        settings(0.1),
+    )
+    .unwrap();
+    let states: Vec<_> = sir
+        .trajectory
+        .iter()
+        .map(|o| (o.state.susceptible, o.state.recovered))
+        .collect();
+    let error = relation_error(&states, 0.3 / 0.1, 1000.0);
+    assert!(error < 1e-6, "SIR deviates by {error} people");
+
+    let seir = simulate_seir(
+        SeirParameters {
+            beta_per_day: 0.3,
+            sigma_per_day: 0.2,
+            gamma_per_day: 0.1,
+        },
+        SeirState {
+            susceptible: 980.0,
+            exposed: 10.0,
+            infected: 5.0,
+            recovered: 5.0,
+        },
+        settings(0.1),
+    )
+    .unwrap();
+    let states: Vec<_> = seir
+        .trajectory
+        .iter()
+        .map(|o| (o.state.susceptible, o.state.recovered))
+        .collect();
+    let error = relation_error(&states, 0.3 / 0.1, 1000.0);
+    assert!(error < 1e-6, "SEIR deviates by {error} people");
+}

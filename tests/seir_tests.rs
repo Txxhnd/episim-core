@@ -468,3 +468,64 @@ fn seir_step_error_estimate_follows_the_recording_interval_and_reports_errors() 
         SimulationError::StepLimitExceeded
     );
 }
+
+#[test]
+fn seir_final_size_matches_a_long_simulation() {
+    let result = simulate_seir(PARAMETERS, INITIAL, settings(400.0, 0.1)).unwrap();
+    let metrics = result.metrics;
+    // By day 400 the epidemic is over, so the simulated incidence has reached
+    // the limit the final size equation predicts.
+    assert!(
+        (metrics.cumulative_incidence_fraction - metrics.final_size_fraction).abs() < 1e-6,
+        "simulated {} vs final size {}",
+        metrics.cumulative_incidence_fraction,
+        metrics.final_size_fraction
+    );
+    // R0 = 5, so four fifths of the population must be immune.
+    assert!((metrics.herd_immunity_threshold - 0.8).abs() < 1e-12);
+}
+
+#[test]
+fn seir_effective_reproduction_number_falls_as_susceptibles_are_used_up() {
+    let result = simulate_seir(PARAMETERS, INITIAL, settings(160.0, 0.25)).unwrap();
+    let values: Vec<f64> = result
+        .trajectory
+        .iter()
+        .map(|o| PARAMETERS.effective_reproduction_number(&o.state).unwrap())
+        .collect();
+
+    // R0 = 5 and 98% of the population starts susceptible.
+    assert!((values[0] - 4.9).abs() < 1e-9);
+    // Susceptibles only ever decrease; the slack covers roundoff in N.
+    assert!(values.windows(2).all(|pair| pair[1] <= pair[0] + 1e-12));
+    assert!(*values.last().unwrap() < 1.0);
+}
+
+#[test]
+fn seir_effective_reproduction_number_rejects_invalid_input() {
+    let no_progression = SeirParameters {
+        sigma_per_day: 0.0,
+        ..PARAMETERS
+    };
+    assert_eq!(
+        no_progression
+            .effective_reproduction_number(&INITIAL)
+            .unwrap_err(),
+        SimulationError::InvalidParameter {
+            name: "sigma_per_day"
+        }
+    );
+
+    let empty = SeirState {
+        susceptible: 0.0,
+        exposed: 0.0,
+        infected: 0.0,
+        recovered: 0.0,
+    };
+    assert_eq!(
+        PARAMETERS
+            .effective_reproduction_number(&empty)
+            .unwrap_err(),
+        SimulationError::InvalidPopulation
+    );
+}

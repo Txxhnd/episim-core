@@ -1,6 +1,6 @@
 use crate::accuracy::{StepErrorEstimate, estimate_step_error};
 use crate::error::SimulationError;
-use crate::metrics::{basic_reproduction_number, calculate_metrics};
+use crate::metrics::{basic_reproduction_number, calculate_metrics, effective_reproduction_number};
 use crate::result::SimulationResult;
 use crate::settings::SimulationSettings;
 use crate::simulation::driver::run_simulation;
@@ -34,6 +34,54 @@ impl SirParameters {
     pub(crate) fn validate(&self) -> Result<(), SimulationError> {
         validation::non_negative_rate("beta_per_day", self.beta_per_day)?;
         validation::positive_rate("gamma_per_day", self.gamma_per_day)
+    }
+
+    /// Model-derived effective reproduction number in `state`: `R0 * S / N`,
+    /// where `N` is the total of `state`.
+    ///
+    /// It is the average number of people one infected person infects while a
+    /// fraction `S / N` of the population is still susceptible. Because
+    /// `dI/dt = gamma * I * (effective R - 1)`, the infected grow while it is
+    /// above 1 and decline while it is below 1. For a state returned by
+    /// [`simulate_sir`], `N` equals the initial population to within the
+    /// population drift tolerance of `1e-9`.
+    ///
+    /// This is a property of the model. It is not an estimate of the effective
+    /// reproduction number `Rt` that public-health agencies infer from case
+    /// data.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SimulationError::InvalidParameter`] for an invalid rate,
+    /// [`SimulationError::InvalidPopulation`] if the total of `state` is not
+    /// finite and positive, and [`SimulationError::MetricOverflow`] if the
+    /// result is not finite.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use episim_core::{SimulationSettings, SirParameters, SirState, simulate_sir};
+    ///
+    /// let parameters = SirParameters { beta_per_day: 0.3, gamma_per_day: 0.1 };
+    /// let initial_state = SirState { susceptible: 990.0, infected: 10.0, recovered: 0.0 };
+    /// let result = simulate_sir(parameters, initial_state, SimulationSettings::new(160.0, 0.25)?)?;
+    ///
+    /// // R0 is 3 and 99% of the population starts susceptible.
+    /// let start = parameters.effective_reproduction_number(&result.trajectory[0].state)?;
+    /// assert!((start - 2.97).abs() < 1e-9);
+    /// // By day 160 too few susceptibles remain to sustain transmission.
+    /// let end = parameters.effective_reproduction_number(&result.trajectory.last().unwrap().state)?;
+    /// assert!(end < 1.0);
+    /// # Ok::<(), episim_core::SimulationError>(())
+    /// ```
+    pub fn effective_reproduction_number(&self, state: &SirState) -> Result<f64, SimulationError> {
+        self.validate()?;
+        let r0 = basic_reproduction_number(self.beta_per_day, self.gamma_per_day)?;
+        effective_reproduction_number(
+            r0,
+            state.susceptible,
+            state.susceptible + state.infected + state.recovered,
+        )
     }
 }
 
@@ -141,6 +189,7 @@ pub fn simulate_sir(
         gamma_per_day,
         |state| state.susceptible,
         |state| state.infected,
+        initial_state.infected,
     )?;
     Ok(SimulationResult {
         trajectory: output.trajectory,
