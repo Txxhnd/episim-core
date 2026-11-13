@@ -170,10 +170,11 @@ pub fn simulate_seir(
             initial_state.exposed,
             initial_state.infected,
             initial_state.recovered,
+            0.0,
         ],
         population,
         settings,
-        |[susceptible, exposed, infected, _]| {
+        |[susceptible, exposed, infected, _, _]| {
             // Dividing first avoids multiplying two large population values.
             let infection_flow = beta_per_day * (susceptible / population) * infected;
             let progression_flow = sigma_per_day * exposed;
@@ -183,15 +184,16 @@ pub fn simulate_seir(
                 infection_flow - progression_flow,
                 progression_flow - recovery_flow,
                 recovery_flow,
+                infection_flow,
             ]
         },
-        |[susceptible, exposed, infected, recovered]| SeirState {
+        |[susceptible, exposed, infected, recovered, _]| SeirState {
             susceptible,
             exposed,
             infected,
             recovered,
         },
-        ["susceptible", "exposed", "infected", "recovered"],
+        &["susceptible", "exposed", "infected", "recovered"],
     )?;
     let metrics = calculate_metrics(
         &output.trajectory,

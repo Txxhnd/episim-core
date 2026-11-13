@@ -17,20 +17,33 @@ pub(crate) struct SimulationOutput<S> {
 /// recording the initial state, the state after every `record_every`-th
 /// accepted step, and the final state.
 ///
-/// `population` is the fixed initial population the caller validated; every
-/// accepted state is checked against it, recorded or not.
+/// The last entry of the state is the cumulative infection count `C`, which
+/// the derivative integrates as `dC/dt = beta * S * I / N`. The entries
+/// before it are the compartments, named by `compartment_names`. `C` is
+/// recorded in each [`Observation`] and is not part of the population.
+///
+/// `population` is the fixed initial population the caller validated; the
+/// compartments of every accepted state are checked against it, recorded or
+/// not.
 pub(crate) fn run_simulation<const N: usize, S, D, C>(
     initial: [f64; N],
     population: f64,
     settings: SimulationSettings,
     derivative: D,
     to_state: C,
-    compartment_names: [&'static str; N],
+    compartment_names: &[&'static str],
 ) -> Result<SimulationOutput<S>, SimulationError>
 where
     D: Fn([f64; N]) -> [f64; N],
     C: Fn([f64; N]) -> S,
 {
+    assert_eq!(compartment_names.len() + 1, N, "one name per compartment");
+    let compartments = N - 1;
+    let observe = |time_days, state: [f64; N]| Observation {
+        time_days,
+        cumulative_infections: state[compartments],
+        state: to_state(state),
+    };
     let duration = settings.duration_days();
     let step = settings.step_days();
     let required_steps = required_steps(&settings)?;
@@ -50,11 +63,13 @@ where
 
     let mut state = initial;
     let mut time = 0.0;
-    check_state(&state, &compartment_names, population, &mut diagnostics)?;
-    trajectory.push(Observation {
-        time_days: time,
-        state: to_state(state),
-    });
+    check_state(
+        &state[..compartments],
+        compartment_names,
+        population,
+        &mut diagnostics,
+    )?;
+    trajectory.push(observe(time, state));
     for index in 1..=required_steps {
         state = rk4_step(state, step.min(duration - time), &derivative)?;
         // Times come from the step index, not from repeated addition, so
@@ -64,12 +79,14 @@ where
         } else {
             index as f64 * step
         };
-        check_state(&state, &compartment_names, population, &mut diagnostics)?;
+        check_state(
+            &state[..compartments],
+            compartment_names,
+            population,
+            &mut diagnostics,
+        )?;
         if index % record_every == 0 || index == required_steps {
-            trajectory.push(Observation {
-                time_days: time,
-                state: to_state(state),
-            });
+            trajectory.push(observe(time, state));
         }
         diagnostics.steps_executed = index;
     }
@@ -117,14 +134,14 @@ fn reserve_trajectory<S>(capacity: usize) -> Result<Vec<Observation<S>>, Simulat
 
 /// Rejects a non-finite or materially negative compartment and excessive
 /// population drift; counts tolerated negative roundoff without changing it.
-fn check_state<const N: usize>(
-    state: &[f64; N],
-    compartment_names: &[&'static str; N],
+fn check_state(
+    compartments: &[f64],
+    compartment_names: &[&'static str],
     population: f64,
     diagnostics: &mut SimulationDiagnostics,
 ) -> Result<(), SimulationError> {
     let negative_tolerance = 64.0 * f64::EPSILON * population.max(1.0);
-    for (&value, &compartment) in state.iter().zip(compartment_names) {
+    for (&value, &compartment) in compartments.iter().zip(compartment_names) {
         if !value.is_finite() {
             return Err(SimulationError::NonFiniteNumericalState { compartment });
         }
@@ -136,7 +153,7 @@ fn check_state<const N: usize>(
         }
     }
 
-    let absolute_drift = (state.iter().sum::<f64>() - population).abs();
+    let absolute_drift = (compartments.iter().sum::<f64>() - population).abs();
     let relative_drift = absolute_drift / population;
     if !relative_drift.is_finite() || relative_drift > MAX_RELATIVE_POPULATION_DRIFT {
         return Err(SimulationError::PopulationConservationViolation);
@@ -161,19 +178,23 @@ mod tests {
         SimulationSettings::new(duration_days, step_days).unwrap()
     }
 
-    /// Runs a two-compartment system whose population is the initial sum.
+    /// Runs a two-compartment system whose population is the initial sum,
+    /// with an accumulator that stays at zero.
     fn run<D>(initial: [f64; 2], settings: SimulationSettings, derivative: D) -> Output
     where
         D: Fn([f64; 2]) -> [f64; 2],
     {
         let population = initial.iter().sum();
         run_simulation(
-            initial,
+            [initial[0], initial[1], 0.0],
             population,
             settings,
-            derivative,
-            |state| state,
-            ["a", "b"],
+            |[a, b, _]| {
+                let [da, db] = derivative([a, b]);
+                [da, db, 0.0]
+            },
+            |[a, b, _]| [a, b],
+            &["a", "b"],
         )
     }
 
@@ -193,9 +214,29 @@ mod tests {
             output.trajectory[0],
             Observation {
                 time_days: 0.0,
+                cumulative_infections: 0.0,
                 state: [100.0, 0.0]
             }
         );
+    }
+
+    #[test]
+    fn driver_records_the_accumulator_outside_the_population() {
+        // One individual a day moves from a to b while the accumulator grows
+        // by five a day: it is recorded, but not counted in the population.
+        let output = run_simulation(
+            [100.0, 0.0, 0.0],
+            100.0,
+            settings(10.0, 1.0),
+            |_| [-1.0, 1.0, 5.0],
+            |[a, b, _]| [a, b],
+            &["a", "b"],
+        )
+        .unwrap();
+        let last = output.trajectory[10];
+        assert_eq!(last.state, [90.0, 10.0]);
+        assert_eq!(last.cumulative_infections, 50.0);
+        assert_eq!(output.diagnostics.maximum_absolute_population_drift, 0.0);
     }
 
     #[test]
@@ -303,12 +344,12 @@ mod tests {
 
         // The initial state is checked against the supplied population as well.
         let mismatched = run_simulation(
-            [100.0, 0.0],
+            [100.0, 0.0, 0.0],
             200.0,
             settings(10.0, 1.0),
-            unit_flow,
-            |state| state,
-            ["a", "b"],
+            |_| [-1.0, 1.0, 0.0],
+            |[a, b, _]| [a, b],
+            &["a", "b"],
         );
         assert_eq!(
             mismatched.unwrap_err(),

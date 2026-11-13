@@ -14,7 +14,7 @@ const RICHARDSON_FACTOR: f64 = 16.0 / 15.0;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StepErrorEstimate {
     /// Estimated largest absolute error, in individuals, of any compartment
-    /// at any recorded time.
+    /// or of the cumulative infections at any recorded time.
     pub max_absolute_error: f64,
     /// `max_absolute_error` divided by the initial population.
     pub max_relative_error: f64,
@@ -32,6 +32,8 @@ pub(crate) fn estimate_step_error<S, const N: usize>(
     let mut max_difference = 0.0_f64;
     for (coarse, fine) in run.iter().zip(half_step_run) {
         debug_assert_eq!(coarse.time_days, fine.time_days);
+        max_difference =
+            max_difference.max((coarse.cumulative_infections - fine.cumulative_infections).abs());
         let (coarse, fine) = (compartments(&coarse.state), compartments(&fine.state));
         for index in 0..N {
             max_difference = max_difference.max((coarse[index] - fine[index]).abs());

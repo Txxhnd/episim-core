@@ -21,11 +21,12 @@ pub struct EpidemicMetrics {
     /// value.
     pub peak_infectious_time_days: f64,
     /// New infections between the start and the final simulation time `T`,
-    /// in individuals: `S(0) - S(T)`. Infections already present at the start
-    /// are not counted.
+    /// in individuals: the cumulative infection count `C(T)` of the last
+    /// observation, which for SIR and SEIR equals `S(0) - S(T)`. Infections
+    /// already present at the start are not counted.
     pub cumulative_infections_since_start: f64,
-    /// Fraction of the initial population newly infected by the final
-    /// simulation time: `(S(0) - S(T)) / N(0)`.
+    /// New infections by the final simulation time per head of the initial
+    /// population: `C(T) / N(0)`.
     pub cumulative_incidence_fraction: f64,
     /// Fraction of the initial population newly infected by the time the
     /// epidemic is over, `(S(0) - S(inf)) / N(0)`, from the final size
@@ -148,7 +149,7 @@ where
 
     let initial_susceptible = finite(susceptible_of(&first.state))?;
     let cumulative_infections_since_start =
-        finite(initial_susceptible - susceptible_of(&last.state))?;
+        finite(last.cumulative_infections - first.cumulative_infections)?;
     let r0 = basic_reproduction_number(beta_per_day, gamma_per_day)?;
     Ok(EpidemicMetrics {
         basic_reproduction_number: r0,
@@ -182,7 +183,8 @@ mod tests {
     ];
 
     /// Metrics of a hand-built trajectory in a population of 1000, with the
-    /// first observation's infectious count as the initial seed.
+    /// first observation's infectious count as the initial seed and, as in
+    /// SIR, the drop in susceptibles as the cumulative infections.
     fn metrics(
         points: &[(f64, f64, f64)],
         beta_per_day: f64,
@@ -192,6 +194,7 @@ mod tests {
             .iter()
             .map(|&(time_days, susceptible, infectious)| Observation {
                 time_days,
+                cumulative_infections: points[0].1 - susceptible,
                 state: [susceptible, infectious],
             })
             .collect();
@@ -224,6 +227,30 @@ mod tests {
     fn metrics_calculate_cumulative_infections_since_start() {
         let metrics = metrics(&EPIDEMIC, 0.5, 0.25).unwrap();
         assert_eq!(metrics.cumulative_infections_since_start, 340.0);
+    }
+
+    #[test]
+    fn metrics_count_cumulative_infections_from_the_accumulator() {
+        // Susceptibles that stay level while infections accumulate: people
+        // are infected and replaced, as when immunity wanes.
+        let trajectory =
+            [(0.0, 0.0), (1.0, 30.0), (2.0, 70.0)].map(|(time_days, infections)| Observation {
+                time_days,
+                cumulative_infections: infections,
+                state: [500.0, 100.0],
+            });
+        let metrics = calculate_metrics(
+            &trajectory,
+            1000.0,
+            0.5,
+            0.25,
+            |state| state[0],
+            |state| state[1],
+            100.0,
+        )
+        .unwrap();
+        assert_eq!(metrics.cumulative_infections_since_start, 70.0);
+        assert_eq!(metrics.cumulative_incidence_fraction, 0.07);
     }
 
     #[test]

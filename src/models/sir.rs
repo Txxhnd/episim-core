@@ -162,10 +162,11 @@ pub fn simulate_sir(
             initial_state.susceptible,
             initial_state.infected,
             initial_state.recovered,
+            0.0,
         ],
         population,
         settings,
-        |[susceptible, infected, _]| {
+        |[susceptible, infected, _, _]| {
             // Dividing first avoids multiplying two large population values.
             let infection_flow = beta_per_day * (susceptible / population) * infected;
             let recovery_flow = gamma_per_day * infected;
@@ -173,14 +174,15 @@ pub fn simulate_sir(
                 -infection_flow,
                 infection_flow - recovery_flow,
                 recovery_flow,
+                infection_flow,
             ]
         },
-        |[susceptible, infected, recovered]| SirState {
+        |[susceptible, infected, recovered, _]| SirState {
             susceptible,
             infected,
             recovered,
         },
-        ["susceptible", "infected", "recovered"],
+        &["susceptible", "infected", "recovered"],
     )?;
     let metrics = calculate_metrics(
         &output.trajectory,

@@ -28,6 +28,7 @@ fn seir_returns_initial_and_final_observations() {
         result.trajectory[0],
         Observation {
             time_days: 0.0,
+            cumulative_infections: 0.0,
             state: INITIAL
         }
     );
@@ -127,6 +128,35 @@ fn seir_preserves_total_population_within_tolerance() {
         );
     }
     assert!(result.diagnostics.maximum_relative_population_drift <= 1e-9);
+}
+
+#[test]
+fn seir_cumulative_infections_equal_the_drop_in_susceptibles() {
+    // Everyone who leaves S is infected, so C(t) = S(0) - S(t) exactly; the
+    // two are integrated separately and may differ only by roundoff.
+    for (beta_per_day, sigma_per_day, gamma_per_day) in [(0.5, 0.2, 0.1), (1.2, 0.5, 0.25)] {
+        let parameters = SeirParameters {
+            beta_per_day,
+            sigma_per_day,
+            gamma_per_day,
+        };
+        let result = simulate_seir(parameters, INITIAL, settings(200.0, 0.25)).unwrap();
+        assert_eq!(result.trajectory[0].cumulative_infections, 0.0);
+        let mut largest_gap = 0.0_f64;
+        for pair in result.trajectory.windows(2) {
+            assert!(pair[1].cumulative_infections >= pair[0].cumulative_infections);
+        }
+        for observation in &result.trajectory {
+            let drop = INITIAL.susceptible - observation.state.susceptible;
+            largest_gap = largest_gap.max((observation.cumulative_infections - drop).abs());
+        }
+        assert!(largest_gap < 1e-9, "beta {beta_per_day}: {largest_gap}");
+        let last = result.trajectory.last().unwrap();
+        assert_eq!(
+            result.metrics.cumulative_infections_since_start,
+            last.cumulative_infections
+        );
+    }
 }
 
 #[test]

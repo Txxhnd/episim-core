@@ -5,6 +5,11 @@ use crate::metrics::EpidemicMetrics;
 pub struct Observation<S> {
     /// Simulation time in days since the start of the simulation.
     pub time_days: f64,
+    /// New infections between day zero and this time, in individuals; 0 at
+    /// day zero. It is integrated with the compartments as
+    /// `dC/dt = beta * S * I / N`, so in a model where people can be infected
+    /// again it counts every infection, not every person.
+    pub cumulative_infections: f64,
     /// Compartment values at that time.
     pub state: S,
 }
