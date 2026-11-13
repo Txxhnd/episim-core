@@ -266,3 +266,62 @@ fn seirs_without_initial_infection_never_becomes_endemic() {
     }
     assert_eq!(result.metrics.endemic_prevalence, Some(0.0));
 }
+
+#[test]
+fn seirs_stability_check_uses_the_step_actually_taken() {
+    // A duration shorter than the step is integrated in one step of that
+    // duration, so the nominal step of 7 days is never used.
+    let result = simulate_seirs(PARAMETERS, INITIAL, settings(1.0, 7.0)).unwrap();
+    assert_eq!(result.diagnostics.steps_executed, 1);
+
+    // The single step of 1 day is still too large for rates summing to 4 per day.
+    assert_eq!(
+        simulate_seirs(parameters(1.0, 1.5, 1.0, 0.5), INITIAL, settings(1.0, 7.0)).unwrap_err(),
+        SimulationError::TimeStepTooLarge { max_step_days: 0.5 }
+    );
+}
+
+#[test]
+fn seirs_reports_metric_overflow_before_integrating() {
+    // beta / gamma overflows to infinity, and these settings would also need
+    // ten billion steps. The parameter problem is reported first.
+    assert_eq!(
+        simulate_seirs(
+            parameters(10.0, 0.1, f64::MIN_POSITIVE, 0.0),
+            INITIAL,
+            settings(1e9, 0.1)
+        )
+        .unwrap_err(),
+        SimulationError::MetricOverflow
+    );
+}
+
+#[test]
+fn seirs_effective_reproduction_number_rejects_invalid_input() {
+    assert_eq!(
+        parameters(0.5, 0.0, 0.1, 0.01)
+            .effective_reproduction_number(&INITIAL)
+            .unwrap_err(),
+        SimulationError::InvalidParameter {
+            name: "sigma_per_day"
+        }
+    );
+    let empty = SeirState {
+        susceptible: 0.0,
+        exposed: 0.0,
+        infected: 0.0,
+        recovered: 0.0,
+    };
+    assert_eq!(
+        PARAMETERS
+            .effective_reproduction_number(&empty)
+            .unwrap_err(),
+        SimulationError::InvalidPopulation
+    );
+    assert_eq!(
+        parameters(10.0, 0.1, f64::MIN_POSITIVE, 0.0)
+            .effective_reproduction_number(&INITIAL)
+            .unwrap_err(),
+        SimulationError::MetricOverflow
+    );
+}

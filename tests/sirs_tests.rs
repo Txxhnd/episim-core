@@ -251,3 +251,61 @@ fn sirs_without_initial_infection_never_becomes_endemic() {
     }
     assert_eq!(result.metrics.endemic_prevalence, Some(0.0));
 }
+
+#[test]
+fn sirs_stability_check_uses_the_step_actually_taken() {
+    // A duration shorter than the step is integrated in one step of that
+    // duration, so the nominal step of 7 days is never used.
+    let result = simulate_sirs(PARAMETERS, INITIAL, settings(1.0, 7.0)).unwrap();
+    assert_eq!(result.diagnostics.steps_executed, 1);
+
+    // The single step of 1 day is still too large for omega = 4 per day.
+    assert_eq!(
+        simulate_sirs(parameters(0.2, 0.1, 4.0), INITIAL, settings(1.0, 7.0)).unwrap_err(),
+        SimulationError::TimeStepTooLarge { max_step_days: 0.5 }
+    );
+}
+
+#[test]
+fn sirs_reports_metric_overflow_before_integrating() {
+    // beta / gamma overflows to infinity, and these settings would also need
+    // ten billion steps. The parameter problem is reported first.
+    assert_eq!(
+        simulate_sirs(
+            parameters(10.0, f64::MIN_POSITIVE, 0.0),
+            INITIAL,
+            settings(1e9, 0.1)
+        )
+        .unwrap_err(),
+        SimulationError::MetricOverflow
+    );
+}
+
+#[test]
+fn sirs_effective_reproduction_number_rejects_invalid_input() {
+    assert_eq!(
+        parameters(0.3, 0.1, -1.0)
+            .effective_reproduction_number(&INITIAL)
+            .unwrap_err(),
+        SimulationError::InvalidParameter {
+            name: "omega_per_day"
+        }
+    );
+    let empty = SirState {
+        susceptible: 0.0,
+        infected: 0.0,
+        recovered: 0.0,
+    };
+    assert_eq!(
+        PARAMETERS
+            .effective_reproduction_number(&empty)
+            .unwrap_err(),
+        SimulationError::InvalidPopulation
+    );
+    assert_eq!(
+        parameters(10.0, f64::MIN_POSITIVE, 0.0)
+            .effective_reproduction_number(&INITIAL)
+            .unwrap_err(),
+        SimulationError::MetricOverflow
+    );
+}
