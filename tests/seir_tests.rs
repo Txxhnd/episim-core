@@ -503,16 +503,16 @@ fn seir_step_error_estimate_follows_the_recording_interval_and_reports_errors() 
 fn seir_final_size_matches_a_long_simulation() {
     let result = simulate_seir(PARAMETERS, INITIAL, settings(400.0, 0.1)).unwrap();
     let metrics = result.metrics;
+    let final_size = metrics.final_size_fraction.unwrap();
     // By day 400 the epidemic is over, so the simulated incidence has reached
     // the limit the final size equation predicts.
     assert!(
-        (metrics.cumulative_incidence_fraction - metrics.final_size_fraction).abs() < 1e-6,
-        "simulated {} vs final size {}",
+        (metrics.cumulative_incidence_fraction - final_size).abs() < 1e-6,
+        "simulated {} vs final size {final_size}",
         metrics.cumulative_incidence_fraction,
-        metrics.final_size_fraction
     );
     // R0 = 5, so four fifths of the population must be immune.
-    assert!((metrics.herd_immunity_threshold - 0.8).abs() < 1e-12);
+    assert!((metrics.herd_immunity_threshold.unwrap() - 0.8).abs() < 1e-12);
 }
 
 #[test]

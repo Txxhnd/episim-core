@@ -44,10 +44,12 @@ fn main() -> Result<(), SimulationError> {
         "  basic reproduction number R0 = {:.2}",
         metrics.basic_reproduction_number
     );
-    println!(
-        "  herd-immunity threshold = {:.1}% of the population",
-        100.0 * metrics.herd_immunity_threshold
-    );
+    if let Some(threshold) = metrics.herd_immunity_threshold {
+        println!(
+            "  herd-immunity threshold = {:.1}% of the population",
+            100.0 * threshold
+        );
+    }
     println!(
         "  peak infectious = {:.1} on day {}",
         metrics.peak_infectious, metrics.peak_infectious_time_days
@@ -57,10 +59,12 @@ fn main() -> Result<(), SimulationError> {
         metrics.cumulative_infections_since_start,
         100.0 * metrics.cumulative_incidence_fraction
     );
-    println!(
-        "  final size when the epidemic is over = {:.1}% of the population",
-        100.0 * metrics.final_size_fraction
-    );
+    if let Some(final_size) = metrics.final_size_fraction {
+        println!(
+            "  final size when the epidemic is over = {:.1}% of the population",
+            100.0 * final_size
+        );
+    }
     println!("Diagnostics");
     println!("  steps executed = {}", diagnostics.steps_executed);
     println!(

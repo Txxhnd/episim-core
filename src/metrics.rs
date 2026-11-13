@@ -5,20 +5,28 @@ use crate::result::Observation;
 ///
 /// These are properties of the simulated model under its assumptions, not
 /// estimates derived from observed surveillance data.
+///
+/// A metric that only some models define is an `Option`, `None` for the
+/// models where it does not apply. The struct is `#[non_exhaustive]`, so
+/// metrics can be added without breaking code that reads it; it cannot be
+/// built with a struct literal outside this crate.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct EpidemicMetrics {
     /// Theoretical basic reproduction number `R0 = beta / gamma`
     /// (dimensionless) for a fully susceptible population.
     pub basic_reproduction_number: f64,
     /// Fraction of the population that must be immune for the infected to
-    /// decline: `1 - 1/R0`, or 0 when `R0 <= 1`.
-    pub herd_immunity_threshold: f64,
+    /// decline: `1 - 1/R0`, or 0 when `R0 <= 1`. `Some` for SIR and SEIR.
+    pub herd_immunity_threshold: Option<f64>,
     /// Largest recorded infectious population, in individuals. Its precision
     /// is limited by the timestep because only recorded observations count.
     pub peak_infectious: f64,
-    /// Time in days of the earliest recorded observation at the infectious
-    /// peak; day zero if the infectious population never exceeds its initial
-    /// value.
+    /// Time in days of the earliest recorded observation within
+    /// `64 * f64::EPSILON * max(N0, 1)` individuals of the infectious peak;
+    /// day zero if the infectious population never exceeds its initial value
+    /// by more than that. The tolerance keeps roundoff from choosing the time
+    /// when the infectious population levels off at its peak.
     pub peak_infectious_time_days: f64,
     /// New infections between the start and the final simulation time `T`,
     /// in individuals: the cumulative infection count `C(T)` of the last
@@ -31,8 +39,8 @@ pub struct EpidemicMetrics {
     /// Fraction of the initial population newly infected by the time the
     /// epidemic is over, `(S(0) - S(inf)) / N(0)`, from the final size
     /// equation. `cumulative_incidence_fraction` approaches it as the
-    /// simulated duration grows.
-    pub final_size_fraction: f64,
+    /// simulated duration grows. `Some` for SIR and SEIR.
+    pub final_size_fraction: Option<f64>,
 }
 
 /// Theoretical `R0 = beta / gamma`, or [`SimulationError::MetricOverflow`] if
@@ -137,15 +145,17 @@ where
     };
 
     let mut peak_infectious = finite(infectious_of(&first.state))?;
-    let mut peak_infectious_time_days = first.time_days;
     for observation in trajectory {
-        let infectious = finite(infectious_of(&observation.state))?;
-        // Strictly greater, so a tie keeps the earliest observation.
-        if infectious > peak_infectious {
-            peak_infectious = infectious;
-            peak_infectious_time_days = observation.time_days;
-        }
+        peak_infectious = peak_infectious.max(finite(infectious_of(&observation.state))?);
     }
+    // Where the infectious population levels off at its peak, roundoff alone
+    // decides which observation is largest; take the first one that is
+    // within roundoff of the peak. The tolerance is the driver's.
+    let tolerance = 64.0 * f64::EPSILON * initial_population.max(1.0);
+    let peak_infectious_time_days = trajectory
+        .iter()
+        .find(|observation| infectious_of(&observation.state) >= peak_infectious - tolerance)
+        .map_or(first.time_days, |observation| observation.time_days);
 
     let initial_susceptible = finite(susceptible_of(&first.state))?;
     let cumulative_infections_since_start =
@@ -153,19 +163,19 @@ where
     let r0 = basic_reproduction_number(beta_per_day, gamma_per_day)?;
     Ok(EpidemicMetrics {
         basic_reproduction_number: r0,
-        herd_immunity_threshold: herd_immunity_threshold(r0),
+        herd_immunity_threshold: Some(herd_immunity_threshold(r0)),
         peak_infectious,
         peak_infectious_time_days,
         cumulative_infections_since_start,
         cumulative_incidence_fraction: finite(
             cumulative_infections_since_start / initial_population,
         )?,
-        final_size_fraction: final_size_fraction(
+        final_size_fraction: Some(final_size_fraction(
             initial_susceptible,
             initially_infected,
             initial_population,
             r0,
-        ),
+        )),
     })
 }
 
@@ -221,6 +231,35 @@ mod tests {
         let metrics = metrics(&EPIDEMIC, 0.5, 0.25).unwrap();
         assert_eq!(metrics.peak_infectious, 80.0);
         assert_eq!(metrics.peak_infectious_time_days, 1.0);
+    }
+
+    #[test]
+    fn metrics_peak_time_ignores_roundoff_at_a_level_peak() {
+        // The tolerance for a population of 1000 is 64 * EPSILON * 1000,
+        // about 1.4e-11 individuals.
+        let level = 666.666_666_666_666_7;
+        let roundoff = [
+            (0.0, 990.0, 10.0),
+            (1.0, 500.0, level),
+            (2.0, 400.0, level + 1e-12),
+            (3.0, 350.0, level + 2e-12),
+        ];
+        let level_peak = metrics(&roundoff, 0.3, 0.1).unwrap();
+        assert_eq!(level_peak.peak_infectious, level + 2e-12);
+        assert_eq!(level_peak.peak_infectious_time_days, 1.0);
+
+        // A rise larger than the tolerance is a real peak.
+        let rising = [
+            (0.0, 990.0, 10.0),
+            (1.0, 500.0, level),
+            (2.0, 400.0, level + 1e-10),
+        ];
+        assert_eq!(
+            metrics(&rising, 0.3, 0.1)
+                .unwrap()
+                .peak_infectious_time_days,
+            2.0
+        );
     }
 
     #[test]
@@ -309,7 +348,7 @@ mod tests {
             assert_eq!(herd_immunity_threshold(r0), 0.0, "R0 {r0}");
         }
         let metrics = metrics(&EPIDEMIC, 0.5, 0.25).unwrap();
-        assert_eq!(metrics.herd_immunity_threshold, 0.5);
+        assert_eq!(metrics.herd_immunity_threshold, Some(0.5));
     }
 
     #[test]
@@ -343,7 +382,7 @@ mod tests {
         let metrics = metrics(&EPIDEMIC, 0.5, 0.25).unwrap();
         assert_eq!(
             metrics.final_size_fraction,
-            final_size_fraction(990.0, 10.0, 1000.0, 2.0)
+            Some(final_size_fraction(990.0, 10.0, 1000.0, 2.0))
         );
     }
 

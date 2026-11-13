@@ -32,14 +32,20 @@ fn main() -> Result<(), SimulationError> {
         // A quarter-day step, recorded once per day.
         let settings = SimulationSettings::new(365.0, 0.25)?.with_record_every(4)?;
         let metrics = simulate_sir(parameters, initial_state, settings)?.metrics;
+        // SIR reports both; only models with waning immunity leave them out.
+        let (Some(threshold), Some(final_size)) =
+            (metrics.herd_immunity_threshold, metrics.final_size_fraction)
+        else {
+            unreachable!("SIR reports a herd-immunity threshold and a final size");
+        };
 
         println!(
             "{r0:4.2} | {:12.1}% | {:12.1}% | {:8} | {:18.1}% | {:9.1}%",
-            100.0 * metrics.herd_immunity_threshold,
+            100.0 * threshold,
             100.0 * metrics.peak_infectious / POPULATION,
             metrics.peak_infectious_time_days,
             100.0 * metrics.cumulative_incidence_fraction,
-            100.0 * metrics.final_size_fraction
+            100.0 * final_size
         );
     }
     Ok(())
