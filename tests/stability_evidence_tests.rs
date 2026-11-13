@@ -13,8 +13,8 @@
 //! fall. A run is flagged if it breaks either property, or if its incidence
 //! or final infected fraction misses the fine run by more than 0.1.
 //!
-//! The SIRS rows also reuse the SIR draws, and take `omega` from a second
-//! generator. No compartment of SIRS is monotone everywhere, so a run is
+//! The SIRS and SEIRS rows also reuse the SIR and SEIR draws, and take
+//! `omega` from a second generator. No compartment of either model is monotone everywhere, so a run is
 //! flagged if, over some coarse step, a compartment or the cumulative
 //! infections move against the exact flow from the same starting state,
 //! where that flow is monotone over the step. The exact flow is a run of 64
@@ -23,7 +23,7 @@
 //! 0.1.
 //!
 //! The measurement is ignored by default because it needs a release build to
-//! finish in about a minute. `docs/numerical_methods.md` quotes its result.
+//! finish in about three minutes. `docs/numerical_methods.md` quotes its result.
 //!
 //! ```sh
 //! cargo test --release --test stability_evidence_tests -- --ignored --nocapture
@@ -34,9 +34,9 @@
 //! while this one detects both.
 
 use episim_core::{
-    Observation, SeirParameters, SeirState, SimulationSettings, SirParameters, SirState,
-    SirsParameters, SisParameters, SisState, simulate_seir, simulate_sir, simulate_sirs,
-    simulate_sis,
+    Observation, SeirParameters, SeirState, SeirsParameters, SimulationSettings, SirParameters,
+    SirState, SirsParameters, SisParameters, SisState, simulate_seir, simulate_seirs, simulate_sir,
+    simulate_sirs, simulate_sis,
 };
 
 const POPULATION: f64 = 1000.0;
@@ -66,6 +66,7 @@ struct Evidence {
     accepted_seir: u32,
     accepted_sis: u32,
     accepted_sirs: u32,
+    accepted_seirs: u32,
     /// One line per accepted run that is qualitatively wrong.
     flagged: Vec<String>,
 }
@@ -90,6 +91,18 @@ fn sir_entries(observation: &Observation<SirState>) -> [f64; 4] {
     let state = observation.state;
     [
         state.susceptible,
+        state.infected,
+        state.recovered,
+        observation.cumulative_infections,
+    ]
+}
+
+/// SEIR compartments and cumulative infections of an observation.
+fn seir_entries(observation: &Observation<SeirState>) -> [f64; 5] {
+    let state = observation.state;
+    [
+        state.susceptible,
+        state.exposed,
         state.infected,
         state.recovered,
         observation.cumulative_infections,
@@ -277,21 +290,66 @@ fn gather(configurations: u32) -> Evidence {
                 ));
             }
         }
+
+        let parameters = SeirsParameters {
+            beta_per_day: beta,
+            sigma_per_day: sigma,
+            gamma_per_day: gamma,
+            omega_per_day: omega,
+        };
+        let total = a + b + c + d;
+        let initial = SeirState {
+            susceptible: POPULATION * a / total,
+            exposed: POPULATION * d / total,
+            infected: POPULATION * b / total,
+            recovered: POPULATION * c / total,
+        };
+        if let (Ok(run), Ok(reference)) = (
+            simulate_seirs(parameters, initial, coarse),
+            simulate_seirs(parameters, initial, fine),
+        ) {
+            evidence.accepted_seirs += 1;
+            let wrong_direction = run.trajectory.windows(2).any(|pair| {
+                let step = pair[1].time_days - pair[0].time_days;
+                let local = SimulationSettings::new(step, step / 64.0).unwrap();
+                // A start with a tolerated negative value is not a valid state.
+                let Ok(exact) = simulate_seirs(parameters, pair[0].state, local) else {
+                    return false;
+                };
+                let exact: Vec<_> = exact.trajectory.iter().map(seir_entries).collect();
+                against_exact_flow(seir_entries(&pair[0]), seir_entries(&pair[1]), &exact)
+            });
+            let (last, fine_last) = (
+                seir_entries(run.trajectory.last().unwrap()),
+                seir_entries(reference.trajectory.last().unwrap()),
+            );
+            // The last entry is the cumulative infections, so this covers the incidence.
+            let final_error = (0..5)
+                .map(|entry| (last[entry] - fine_last[entry]).abs() / POPULATION)
+                .fold(0.0, f64::max);
+            if wrong_direction || final_error > MAX_INCIDENCE_ERROR {
+                evidence.flagged.push(format!(
+                    "SEIRS {parameters:?} {initial:?} duration {duration}: \
+                     wrong direction {wrong_direction}, final error {final_error}"
+                ));
+            }
+        }
     }
     evidence
 }
 
 #[test]
-#[ignore = "about a minute in release mode; run with --release -- --ignored --nocapture"]
+#[ignore = "about three minutes in release mode; run with --release -- --ignored --nocapture"]
 fn full_stability_evidence() {
     let evidence = gather(250_000);
     println!(
         "accepted SIR runs: {}, accepted SEIR runs: {}, accepted SIS runs: {}, \
-         accepted SIRS runs: {}, flagged: {}",
+         accepted SIRS runs: {}, accepted SEIRS runs: {}, flagged: {}",
         evidence.accepted_sir,
         evidence.accepted_seir,
         evidence.accepted_sis,
         evidence.accepted_sirs,
+        evidence.accepted_seirs,
         evidence.flagged.len()
     );
     assert!(
@@ -309,6 +367,12 @@ fn full_stability_evidence() {
         evidence.accepted_sirs >= 80_000,
         "{}",
         evidence.accepted_sirs
+    );
+    // The SEIRS limit is conservative; it accepts about one configuration in 29.
+    assert!(
+        evidence.accepted_seirs >= 6_000,
+        "{}",
+        evidence.accepted_seirs
     );
     assert!(evidence.flagged.is_empty(), "{:#?}", evidence.flagged);
 }

@@ -21,7 +21,8 @@ pub struct SeirParameters {
     pub gamma_per_day: f64,
 }
 
-/// Population counts in each SEIR compartment.
+/// Population counts in each SEIR compartment, used by both
+/// [`simulate_seir`] and [`simulate_seirs`](crate::simulate_seirs).
 ///
 /// Counts are expected values and may be fractional. Every compartment must
 /// be finite and non-negative, and the total must be finite and strictly
@@ -34,7 +35,8 @@ pub struct SeirState {
     pub exposed: f64,
     /// Individuals who are currently infectious.
     pub infected: f64,
-    /// Individuals who have recovered and are assumed immune.
+    /// Individuals who have recovered and are immune: for good in SEIR, until
+    /// their immunity wanes in SEIRS.
     pub recovered: f64,
 }
 
