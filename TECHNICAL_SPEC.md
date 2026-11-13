@@ -2,14 +2,16 @@
 ## Technical Specification
 
 **Document:** TECHNICAL_SPEC.md  
-**Version:** 0.1  
-**Status:** Draft for Technical Approval  
+**Version:** 0.2  
+**Status:** Approved and implemented; kept in step with the code on `master` (revised November 13, 2026)  
 **Product:** EPISIM-CORE  
 **Language:** Rust  
 **Edition:** 2024  
 **Minimum Supported Rust Version:** 1.85  
 **Target Release:** v0.1.0  
 **Architecture:** Pure Rust Library
+
+**Revision note (0.2).** This specification was written before implementation. Revision 0.2 brings it in line with the code: the manifest, project structure, settings, solver signature, simulation pipeline, error variants, tests, quality pipeline, decisions register and resolved questions. Sections already updated by later changes (the recording interval, the stability limit, the step-error estimate and the threshold quantities) are unchanged. Where a section still describes the original proposal, it says so.
 
 ---
 
@@ -26,10 +28,11 @@ The first release supports:
 - SIR compartmental model.
 - SEIR compartmental model.
 - Classical fourth-order Runge-Kutta numerical integration.
-- Fixed-step simulation.
-- Epidemiological metrics.
+- Fixed-step simulation, with timesteps beyond the RK4 stability limit rejected (Section 6.3).
+- An optional recording interval (Section 6.1).
+- Epidemiological metrics, including threshold quantities (Sections 10.5 and 10.6).
 - Structured simulation results.
-- Numerical validation and diagnostics.
+- Numerical validation and diagnostics, and an estimate of the error the timestep introduces (Section 12.5).
 
 The architecture must keep epidemiological equations, numerical integration, simulation orchestration, and result analysis logically separated.
 
@@ -78,7 +81,7 @@ The following are excluded from v0.1.0:
 
 ### 2.1 Cargo Configuration
 
-Proposed initial manifest:
+The manifest as implemented:
 
 ```toml
 [package]
@@ -87,11 +90,30 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 description = "A lightweight epidemiological simulation engine"
+readme = "README.md"
+license = "MIT"
+keywords = ["epidemiology", "simulation", "sir", "seir", "ode"]
+categories = ["science", "simulation", "mathematics"]
+include = [
+    "/src/**/*.rs",
+    "/tests/**/*.rs",
+    "/examples/**/*.rs",
+    "/benches/**/*.rs",
+    "/docs/**/*.md",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+]
+
+[dev-dependencies]
+criterion = { version = "0.7.0", default-features = false, features = ["cargo_bench_support"] }
 ```
+
+The `include` list keeps the planning documents, `design/` and `plans/` out of the published package. There is deliberately no `repository` field yet.
 
 The library must not require external dependencies for its core functionality.
 
-Criterion may be introduced as a development-only dependency for benchmarks.
+Criterion is a development-only dependency for benchmarks.
 
 ### 2.2 Code Quality Requirements
 
@@ -223,7 +245,7 @@ Responsibilities:
 
 # 4. Project Structure
 
-The proposed source structure is:
+The source structure as implemented:
 
 ```text
 episim-core/
@@ -233,6 +255,7 @@ episim-core/
 ├── README.md
 ├── LICENSE
 ├── CHANGELOG.md
+├── .github/workflows/ci.yml
 │
 ├── src/
 │   ├── lib.rs
@@ -241,6 +264,7 @@ episim-core/
 │   ├── settings.rs
 │   ├── result.rs
 │   ├── metrics.rs
+│   ├── accuracy.rs
 │   │
 │   ├── models/
 │   │   ├── mod.rs
@@ -256,25 +280,34 @@ episim-core/
 │       └── driver.rs
 │
 ├── tests/
+│   ├── crate_smoke_test.rs
 │   ├── sir_tests.rs
 │   ├── seir_tests.rs
 │   ├── validation_tests.rs
 │   ├── numerical_tests.rs
-│   └── convergence_tests.rs
+│   ├── convergence_tests.rs
+│   └── stability_evidence_tests.rs
 │
 ├── examples/
 │   ├── basic_sir.rs
-│   └── basic_seir.rs
+│   ├── basic_seir.rs
+│   ├── outbreak_curve.rs
+│   └── r0_sweep.rs
 │
 ├── benches/
 │   └── simulation_bench.rs
 │
-└── docs/
-    ├── architecture.md
-    ├── mathematical_models.md
-    ├── numerical_methods.md
-    └── api_design.md
+├── docs/
+│   ├── architecture.md
+│   ├── mathematical_models.md
+│   ├── numerical_methods.md
+│   └── api_design.md
+│
+└── design/
+    └── 007-waning-immunity-models.md
 ```
+
+The unit tests of private code (solver, driver, validators, metric calculation) live in `#[cfg(test)]` modules next to that code, because integration tests cannot reach `pub(crate)` items.
 
 ## 4.1 Module Ownership
 
@@ -286,6 +319,7 @@ episim-core/
 | `settings.rs` | Simulation configuration |
 | `result.rs` | Result and observation structures |
 | `metrics.rs` | Epidemiological metrics |
+| `accuracy.rs` | Step-error estimate |
 | `models/sir.rs` | SIR equations and model implementation |
 | `models/seir.rs` | SEIR equations and model implementation |
 | `solver/rk4.rs` | Numerical integration |
@@ -414,15 +448,28 @@ It must not be recalculated as the simulation progresses because doing so could 
 
 ## 6.1 SimulationSettings
 
-Proposed public configuration:
+Public configuration, with private fields set through validated construction:
 
 ```rust
 pub struct SimulationSettings {
-    pub duration_days: f64,
-    pub step_days: f64,
-    pub max_steps: usize,
+    duration_days: f64,
+    step_days: f64,
+    max_steps: usize,
+    record_every: usize,
+}
+
+impl SimulationSettings {
+    pub fn new(duration_days: f64, step_days: f64) -> Result<Self, SimulationError>;
+    pub fn with_max_steps(self, max_steps: usize) -> Result<Self, SimulationError>;
+    pub fn with_record_every(self, steps: usize) -> Result<Self, SimulationError>;
+    pub fn duration_days(&self) -> f64;
+    pub fn step_days(&self) -> f64;
+    pub fn max_steps(&self) -> usize;
+    pub fn record_every(&self) -> usize;
 }
 ```
+
+Invalid settings therefore cannot reach the simulation driver.
 
 Responsibilities:
 
@@ -437,12 +484,13 @@ Responsibilities:
 | `duration_days` | Finite and greater than zero |
 | `step_days` | Finite and greater than zero |
 | `max_steps` | Greater than zero |
+| `record_every` | Greater than zero |
 
 ### Maximum Step Limit
 
-The proposed default maximum is 1,000,000 integration steps.
+The default maximum is 1,000,000 integration steps.
 
-Users may explicitly increase the limit through a configuration method.
+Users may change the limit with `with_max_steps`.
 
 This is an engineering safeguard, not an epidemiological restriction.
 
@@ -565,24 +613,19 @@ Here, `h` represents the current integration interval.
 
 The solver must operate on fixed-size numerical arrays.
 
-Conceptual implementation:
+The implemented signature:
 
 ```rust
 pub(crate) fn rk4_step<const N: usize, F>(
     state: [f64; N],
     step: f64,
     derivative: F,
-) -> [f64; N]
+) -> Result<[f64; N], SimulationError>
 where
-    F: Fn([f64; N]) -> [f64; N],
-{
-    // Calculate four RK4 slopes.
-    // Return the next state.
-    todo!()
-}
+    F: Fn([f64; N]) -> [f64; N];
 ```
 
-This is an internal function, not part of the public API.
+This is an internal function, not part of the public API. A non-finite step returns `InvalidTimeStep`. A non-finite stage input or slope returns `NonFiniteIntermediate { stage }` with stage `"k1"` to `"k4"`, and a non-finite combined result uses stage `"final"`.
 
 The implementation should avoid heap allocations during individual integration steps.
 
@@ -731,64 +774,17 @@ The simulation driver must execute the following sequence:
 11. Calculate epidemiological metrics.
 12. Return a structured result.
 
-Conceptual pseudocode:
+As implemented, there is no model trait. Each public `simulate_*` function does steps 1 to 3 itself:
 
-```rust
-fn run_simulation<Model>(
-    model: Model,
-    initial_state: Model::State,
-    settings: SimulationSettings,
-) -> Result<SimulationResult<Model::State>, SimulationError> {
-    validate_configuration(
-        &model,
-        &initial_state,
-        &settings,
-    )?;
+1. It validates its parameters and initial state.
+2. It applies the stability limit and checks that `R0` is finite.
+3. It calls the shared internal driver, `run_simulation` in `src/simulation/driver.rs`.
 
-    let mut trajectory = Vec::new();
+The driver receives the initial state as a fixed-size array, the fixed population, the settings, the derivative as a closure, a closure that converts an array back into the public state type, and the compartment names used in errors. The driver does steps 4 to 10. It counts the steps and enforces the limit before any allocation, then reserves the trajectory with a fallible reservation and integrates. Each accepted state is checked and recorded at the configured interval. The model function then calculates the metrics (step 11) and assembles the result (step 12).
 
-    trajectory.push(
-        Observation::new(0.0, initial_state)
-    );
+Observation times are computed as `index * step_days`, with the last one set to the duration, rather than by repeated addition. The step count is `duration / step`, reduced by four ulps before rounding up, so that a duration that is a whole number of steps does not gain a step of rounding-error length.
 
-    let mut current_state = initial_state;
-    let mut current_time = 0.0;
-
-    while current_time < settings.duration_days {
-        let step = calculate_next_step(
-            current_time,
-            settings,
-        )?;
-
-        current_state = integrate_rk4(
-            &model,
-            current_state,
-            step,
-        )?;
-
-        validate_numerical_state(
-            current_state,
-            &model,
-        )?;
-
-        current_time =
-            advance_time(current_time, step, settings)?;
-
-        trajectory.push(
-            Observation::new(
-                current_time,
-                current_state,
-            )
-        );
-    }
-
-    calculate_result(trajectory)
-}
-```
-
-This pseudocode illustrates responsibilities and execution order. The actual implementation may use separate internal traits or functions to avoid unnecessary generic complexity.
-
-The public model API must remain concrete.
+The public model API remains concrete.
 
 ---
 
@@ -826,7 +822,7 @@ pub fn simulate_seir(
 ) -> Result<SimulationResult<SeirState>, SimulationError>;
 ```
 
-Both functions must use the same internal solver infrastructure.
+Both functions must use the same internal solver infrastructure. The step-error estimates (Section 12.5) and the effective reproduction number (Section 10.6) complete the public functions.
 
 ## 10.3 Observation Structure
 
@@ -1002,6 +998,10 @@ pub enum SimulationError {
         max_step_days: f64,
     },
 
+    NonFiniteIntermediate {
+        stage: &'static str,
+    },
+
     NonFiniteNumericalState {
         compartment: &'static str,
     },
@@ -1018,7 +1018,7 @@ pub enum SimulationError {
 }
 ```
 
-The final implementation may include additional diagnostic values in selected variants.
+As implemented, the enum is marked `#[non_exhaustive]`, so variants can be added without a breaking change, and derives `Debug`, `Clone` and `PartialEq`. `Display` is written by hand. No variant carries numeric context beyond `max_step_days`.
 
 The library must distinguish:
 
@@ -1170,6 +1170,7 @@ Testing must validate both mathematical correctness and software behavior.
 - Invalid timestep.
 - Invalid duration.
 - Maximum-step limit exceeded.
+- Zero recording interval.
 - Timestep beyond the stability limit, for each rate parameter and for the coupled SEIR rate.
 
 ## 13.2 Integration Tests
@@ -1221,6 +1222,11 @@ I(t)=I_0e^{-\gamma t}
 
 These scenarios provide useful reference tests without using the same numerical implementation to generate expected values.
 
+For the epidemic phase, which has no closed form, two exact relations serve as references. Both hold in SIR and SEIR:
+
+- \(S(t)=S(0)\,e^{-R_0(R(t)-R(0))/N}\) along the whole trajectory (`tests/numerical_tests.rs`);
+- the final size equation of Section 10.5, compared with long simulations (`tests/sir_tests.rs`, `tests/seir_tests.rs`).
+
 ## 13.4 Numerical Convergence Tests
 
 For selected smooth scenarios:
@@ -1235,7 +1241,17 @@ Compare numerical trajectories against a sufficiently accurate reference.
 
 RK4 should demonstrate fourth-order convergence in the asymptotic error region.
 
-The release acceptance threshold is a conservative error-reduction factor of at least 8 when halving the timestep in designated fixtures.
+The release acceptance threshold is a conservative error-reduction factor of at least 8 when halving the timestep in designated fixtures. The implemented fixtures compare the nonlinear models with a run at 1/64 day. The measured factors are 13.9 and 14.9 for SIR, and 15.6 and 15.8 for SEIR.
+
+## 13.6 Stability Evidence
+
+`tests/stability_evidence_tests.rs` keeps the measurement behind the stability limit of Section 6.3. It draws 250,000 random configurations from a fixed-seed generator and runs each at one day and at 1/64 day. It then counts accepted runs that are qualitatively wrong. It is ignored by default because it needs a release build:
+
+```bash
+cargo test --release --test stability_evidence_tests -- --ignored --nocapture
+```
+
+It reports 226,590 accepted SIR runs and 107,633 accepted SEIR runs, none flagged. A smaller sample in the normal test suite was tried and rejected: with 500 configurations it could detect neither a loosened limit nor a missing coupled SEIR rate.
 
 ## 13.5 Population Conservation Tests
 
@@ -1300,6 +1316,8 @@ Benchmark reports must document:
 
 No arbitrary runtime target should be introduced before collecting a baseline.
 
+The baseline was recorded on November 12, 2026 and is kept in `docs/architecture.md`. It covers an Intel Core i5-5350U, macOS 12.7.6 and rustc 1.99.1. That is roughly 70 to 110 nanoseconds per step, for example 88 ms for 1,000,000 SIR steps. Memory was not measured. The trajectory accounts for one observation per recorded step.
+
 ---
 
 # 15. Documentation Requirements
@@ -1309,6 +1327,8 @@ The following documentation must exist before the first public release.
 | Document | Purpose |
 |---|---|
 | README.md | Overview and quick start |
+| CHANGELOG.md | Release notes |
+| LICENSE | MIT licence |
 | mathematical_models.md | SIR and SEIR mathematical definitions |
 | numerical_methods.md | RK4 method and limitations |
 | architecture.md | Internal software architecture |
@@ -1325,17 +1345,19 @@ The documentation must explicitly state the models' assumptions and intended lim
 
 # 16. Quality Assurance and Release Pipeline
 
-The following commands define the baseline local quality checks.
+The following commands define the baseline quality checks. GitHub Actions (`.github/workflows/ci.yml`) runs them on every push to `master` and on every pull request:
 
 ```bash
 cargo fmt --all -- --check
 
 cargo clippy --all-targets --all-features -- -D warnings
 
-cargo test --all-targets
+cargo test
 
-cargo doc --no-deps --all-features
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 ```
+
+`cargo test` is used rather than `cargo test --all-targets`, because `--all-targets` skips the doctests. A second CI job runs `cargo test` on Rust 1.85.0, the declared minimum supported version.
 
 Release preparation should additionally verify:
 
@@ -1360,6 +1382,8 @@ Benchmark results should be recorded separately from functional test results.
 # 17. Implementation Roadmap
 
 **Estimated implementation duration: 5 weeks**
+
+*This roadmap is the original proposal. The work was carried out as Tasks 1 to 13 of `implementation_plan.md`, which records where the implementation departed from it.*
 
 ## Week 1: Project Foundation
 
@@ -1454,45 +1478,46 @@ A sixth week may be used to resolve numerical validation failures or revise publ
 
 | ID | Decision | Status |
 |---|---|---|
-| TD-01 | Pure Rust library | Selected |
-| TD-02 | Rust 2024 Edition | Selected |
-| TD-03 | SIR and SEIR for MVP | Selected |
-| TD-04 | f64 numerical precision | Proposed |
-| TD-05 | Internal classical RK4 | Proposed |
-| TD-06 | Fixed timestep | Proposed |
-| TD-07 | Concrete public model functions | Proposed |
-| TD-08 | Shared internal solver | Proposed |
-| TD-09 | No mandatory runtime dependencies | Proposed |
-| TD-10 | Maximum simulation step limit | Proposed |
-| TD-11 | Full trajectory storage | Proposed |
-| TD-12 | No silent clipping of invalid states | Selected design constraint |
-| TD-13 | Reject timesteps beyond the RK4 stability limit | Selected |
-
-Proposed decisions are the recommended implementation baseline but should be reviewed before coding begins.
+| TD-01 | Pure Rust library | Implemented |
+| TD-02 | Rust 2024 Edition | Implemented |
+| TD-03 | SIR and SEIR for MVP | Implemented |
+| TD-04 | f64 numerical precision | Implemented |
+| TD-05 | Internal classical RK4 | Implemented |
+| TD-06 | Fixed timestep | Implemented |
+| TD-07 | Concrete public model functions | Implemented |
+| TD-08 | Shared internal solver | Implemented |
+| TD-09 | No mandatory runtime dependencies | Implemented |
+| TD-10 | Maximum simulation step limit | Implemented (default 1,000,000) |
+| TD-11 | Full trajectory storage | Implemented, with an optional recording interval (TD-14) |
+| TD-12 | No silent clipping of invalid states | Implemented |
+| TD-13 | Reject timesteps beyond the RK4 stability limit | Implemented (Section 6.3) |
+| TD-14 | Recording interval that changes storage only | Implemented (Section 6.1) |
+| TD-15 | Step-error estimate by step halving | Implemented (Section 12.5) |
+| TD-16 | Model-derived threshold quantities; no `Rt` estimation | Implemented (Sections 10.5, 10.6) |
+| TD-17 | MIT licence; MSRV 1.85 checked in CI | Implemented |
+| TD-18 | SIS, SIRS and SEIRS per `design/007-waning-immunity-models.md` | Accepted November 13, 2026; not yet implemented |
 
 ---
 
-# 19. Outstanding Technical Questions
+# 19. Resolved Technical Questions
 
-The following details require resolution before the implementation plan is finalized.
+These questions were open when the specification was written. All are resolved.
 
-1. **Public API ergonomics:** Should model parameters and initial states be passed by value or by reference? The current recommendation is by value because the structures are small and implement `Copy`.
+1. **Public API ergonomics:** parameters, initial states and settings are passed by value. All of them are small and implement `Copy`.
 
-2. **Maximum step limit:** Is a default of one million steps acceptable, with an explicit override?
+2. **Maximum step limit:** the default is one million steps, and `with_max_steps` overrides it.
 
-3. **Memory allocation behavior:** Should the engine expose allocation failure as a typed error using fallible reservation?
+3. **Memory allocation behavior:** the trajectory is reserved with `try_reserve_exact`, and a failure returns `AllocationFailure`.
 
-4. **Numerical tolerances:** The proposed population and negativity tolerances need verification with actual reference fixtures.
+4. **Numerical tolerances:** the drift limit of 1e-9 and the negativity tolerance of `64 * f64::EPSILON * max(N0, 1)` hold in every reference fixture. The SIR and SEIR drift tests include a population of one billion with a one-day step.
 
-5. **Benchmark baseline:** Absolute performance targets should be established after measuring the first working implementation.
-
-These are technical refinements and do not change the central product scope.
+5. **Benchmark baseline:** measured (Section 14.3). No absolute performance target has been set.
 
 ---
 
 # 20. Definition of Technical Completion
 
-EPISIM-CORE v0.1.0 is technically complete when:
+EPISIM-CORE v0.1.0 is technically complete when the following hold. As of November 13, 2026 all of them do, and the package has not been published.
 
 - Both epidemiological models are implemented.
 - Both models use the shared RK4 solver.

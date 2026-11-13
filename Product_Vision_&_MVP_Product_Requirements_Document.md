@@ -1,13 +1,15 @@
 # EPISIM-CORE
 ## Product Vision & MVP Product Requirements Document
 
-**Document status:** Draft for Review  
-**Version:** 0.1  
-**Date:** November 11, 2026  
+**Document status:** Approved; MVP implemented, not yet released  
+**Version:** 0.2  
+**Date:** November 11, 2026 (revised November 13, 2026)  
 **Product type:** Rust Computational Library  
 **Development target:** 5 weeks  
 **Release target:** v0.1.0  
 **Working name:** EPISIM-CORE
+
+**Revision note (0.2).** The MVP described in Part II is implemented on `master`. It has not been published. Section 13 records the evidence for each acceptance criterion, and Section 20 lists what was added after the MVP baseline and what is planned next. The requirements themselves are unchanged, except where a section says it was revised.
 
 ---
 
@@ -93,17 +95,17 @@ Identical inputs and execution environments must produce consistent deterministi
 
 The following capabilities represent the broader product vision. They are not commitments for the first release.
 
-| Development area | Potential capabilities |
-|---|---|
-| Compartmental models | SIR, SEIR, SIRS, SIS, SEIRS |
-| Advanced population models | Age-stratified and heterogeneous populations |
-| Transmission dynamics | Time-varying transmission parameters |
-| Intervention modeling | Vaccination, isolation, and social interventions |
-| Numerical methods | Adaptive integration and alternative solvers |
-| Stochastic modeling | Stochastic compartmental simulation |
-| Individual simulation | Agent-based epidemiological models |
-| Analytical capabilities | Sensitivity analysis and parameter estimation |
-| Ecosystem integration | WebAssembly and downstream application bindings |
+| Development area | Potential capabilities | Status (November 13, 2026) |
+|---|---|---|
+| Compartmental models | SIR, SEIR, SIRS, SIS, SEIRS | SIR and SEIR implemented. SIS, SIRS and SEIRS designed (`design/007-waning-immunity-models.md`) and planned. |
+| Advanced population models | Age-stratified and heterogeneous populations | Not started |
+| Transmission dynamics | Time-varying transmission parameters | Deferred until the waning-immunity models land |
+| Intervention modeling | Vaccination, isolation, and social interventions | Not started. Vaccination before day zero can be represented by moving people from S to R in the initial state. |
+| Numerical methods | Adaptive integration and alternative solvers | Not started. A step-error estimate exists instead (Section 20). |
+| Stochastic modeling | Stochastic compartmental simulation | Not started |
+| Individual simulation | Agent-based epidemiological models | Not started |
+| Analytical capabilities | Sensitivity analysis and parameter estimation | Not started |
+| Ecosystem integration | WebAssembly and downstream application bindings | Not started |
 
 The long-term direction is to evolve from a small deterministic simulation library into a modular epidemiological computational engine.
 
@@ -445,6 +447,20 @@ This definition measures the proportion of the initial population newly infected
 
 The MVP must not present this value as a data-derived estimate of incidence in a real population.
 
+**Threshold quantities (added after the MVP baseline; revised in 0.2)**
+
+The library also reports three quantities that follow exactly from the model equations:
+
+    herd_immunity_threshold = 1 - 1/R0, or 0 when R0 <= 1
+
+    final_size_fraction = [S(0) - S(inf)] / N(0)
+
+where S(inf) solves the final size equation S(inf) = S(0) exp(-R0 (S(0) + seed - S(inf)) / N), and seed is the number infected (plus, for SEIR, exposed) at the start.
+
+    effective R = R0 * S / N, for any state
+
+Effective R is a method on the parameter types, not a metric. It is the model-derived value. It is **not** the effective reproduction number Rt that public-health agencies estimate from case data, and the documentation must keep the two distinct. The library does not estimate Rt.
+
 ## 10. Functional Requirements
 
 | ID | Requirement | Priority | Acceptance Condition |
@@ -542,20 +558,22 @@ The quick-start example should demonstrate this workflow without requiring addit
 
 The v0.1.0 release is considered ready when:
 
-- [ ] SIR implementation is complete.
-- [ ] SEIR implementation is complete.
-- [ ] RK4 integration is validated.
-- [ ] Initial state and parameter validation are implemented.
-- [ ] Time-series output is correctly generated.
-- [ ] Epidemiological metrics pass their reference tests.
-- [ ] Population conservation tests pass.
-- [ ] Numerical convergence tests pass.
-- [ ] Invalid numerical states are handled explicitly.
-- [ ] Unit and integration tests pass.
-- [ ] Documentation examples compile.
-- [ ] Public API documentation is complete.
-- [ ] Release benchmarks are recorded.
-- [ ] Release packaging is verified.
+- [x] SIR implementation is complete. (`simulate_sir`, `tests/sir_tests.rs`)
+- [x] SEIR implementation is complete. (`simulate_seir`, `tests/seir_tests.rs`)
+- [x] RK4 integration is validated. (solver unit tests; closed-form and convergence tests)
+- [x] Initial state and parameter validation are implemented. (`tests/validation_tests.rs`)
+- [x] Time-series output is correctly generated. (initial and final observations, final partial step)
+- [x] Epidemiological metrics pass their reference tests. (hand-built trajectories; final size against long runs)
+- [x] Population conservation tests pass. (drift at or below 1e-9 over whole trajectories)
+- [x] Numerical convergence tests pass. (measured error-reduction factors 13.9 to 15.8 against the target of 8)
+- [x] Invalid numerical states are handled explicitly. (typed errors; no clipping)
+- [x] Unit and integration tests pass. (110 passed, 2 ignored measurement tests, on November 13, 2026)
+- [x] Documentation examples compile. (Rustdoc examples and the Markdown examples run as doctests)
+- [x] Public API documentation is complete. (`#![warn(missing_docs)]`; `cargo doc` with warnings denied in CI)
+- [x] Release benchmarks are recorded. (`docs/architecture.md`, measured November 12, 2026)
+- [x] Release packaging is verified. (`cargo package` builds and verifies 37 files)
+
+All criteria are met. Before publishing, the competitive landscape must be reviewed again (Section 16), and the owner must decide on the repository URL in the package metadata, which is deliberately left out for now.
 
 ## 14. Risks and Mitigation
 
@@ -582,6 +600,8 @@ The v0.1.0 release is considered ready when:
 | 5 | Quality assurance and documentation | Benchmark results, examples, and v0.1.0 release |
 
 The timeline may extend to six weeks if numerical validation identifies issues that require additional investigation.
+
+**Outcome (revised in 0.2).** The MVP was built on November 12, 2026, following `implementation_plan.md` (Tasks 1 to 13). Numerical review added the timestep stability guard. The v0.1.0 release itself has not been published.
 
 ## 16. Research and Competitive Context
 
@@ -642,21 +662,23 @@ The competitive landscape must be reviewed again before public release.
 
 The following decisions define the proposed baseline for implementation.
 
-| Decision | Proposed selection |
-|---|---|
-| Product architecture | Pure Rust library |
-| Initial models | SIR and SEIR |
-| Numerical integration | Classical RK4 |
-| Integration strategy | Fixed timestep |
-| Numerical precision | f64 |
-| Population representation | Floating-point expected counts |
-| Model parameters | Constant over simulation duration |
-| Population dynamics | Closed population |
-| Public model API | Concrete SIR and SEIR interfaces |
-| Runtime dependencies | None |
-| Serialization | Deferred |
-| CLI and GUI | Excluded |
-| Initial release | v0.1.0 |
+| Decision | Selection | Status |
+|---|---|---|
+| Product architecture | Pure Rust library | Implemented |
+| Initial models | SIR and SEIR | Implemented |
+| Numerical integration | Classical RK4 | Implemented |
+| Integration strategy | Fixed timestep, with timesteps beyond the RK4 stability limit rejected | Implemented |
+| Numerical precision | f64 | Implemented |
+| Population representation | Floating-point expected counts | Implemented |
+| Model parameters | Constant over simulation duration | Implemented |
+| Population dynamics | Closed population | Implemented |
+| Public model API | Concrete SIR and SEIR interfaces | Implemented |
+| Runtime dependencies | None | Implemented |
+| Serialization | Deferred | Deferred |
+| CLI and GUI | Excluded | Excluded |
+| Initial release | v0.1.0 | Ready, not published |
+| Licence | MIT, copyright holder ZQ | Implemented |
+| Minimum supported Rust version | 1.85, checked in CI | Implemented |
 
 The public API should initially expose concrete model-specific functions. Internal abstractions may be shared between models, but a generic public model-extension trait is deferred until a real extension requirement has been established.
 
@@ -673,3 +695,33 @@ It must instead establish a trustworthy computational foundation that can suppor
 **MVP Mission:** Deliver a validated, deterministic SIR and SEIR simulation library with a clear public API and reproducible numerical behavior.
 
 **Release Objective:** Establish EPISIM-CORE v0.1.0 as a technically sound foundation for subsequent model expansion.
+
+---
+
+# PART IV. PROGRESS AFTER THE MVP BASELINE
+
+## 20. Additions and Next Steps
+
+*Added in revision 0.2.*
+
+After the MVP baseline, the following were added through improvement plans 001 to 007. They are kept in `plans/` in the working copy, which is not committed to the repository. None of them widens the scope excluded in Section 5.2.
+
+| Addition | Purpose |
+|---|---|
+| MIT licence, package metadata, CI on stable and on Rust 1.85 | Release groundwork |
+| Stability evidence kept as an ignored test | The limit of 2 can be re-measured: 226,590 SIR and 107,633 SEIR runs accepted, none flagged |
+| Recording interval (`SimulationSettings::with_record_every`) | Small timesteps without storing every step |
+| Step-error estimate (`estimate_sir_step_error`, `estimate_seir_step_error`) | Shows how much error the chosen timestep introduces, since the fixed-step solver reports none |
+| Herd-immunity threshold, final size, effective R (Section 9.2) | Threshold quantities for teaching and reasoning |
+| Teaching examples (`outbreak_curve`, `r0_sweep`) | CSV output from example programs; the library itself still exports nothing |
+| Design for SIS, SIRS and SEIRS (`design/007-waning-immunity-models.md`) | The waning-immunity models from Section 6, designed and measured before building |
+
+**Next.** On November 13, 2026 the owner accepted the design's eight recommendations. Five build plans (008 to 012) follow from them:
+
+1. A cumulative infection count for every model.
+2. Optional model-specific metrics in a non-exhaustive `EpidemicMetrics`.
+3. The SIS model.
+4. The SIRS model.
+5. The SEIRS model.
+
+These change the public API before the first release (a field on `Observation`, `Option` fields on `EpidemicMetrics`). That is why they should land before v0.1.0 is published, or the release should be renumbered once they do. Time-varying transmission waits until after them.

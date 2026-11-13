@@ -10,7 +10,7 @@
 
 **Spec:** `TECHNICAL_SPEC.md` in the repository root (implements Part II of `Product_Vision_&_MVP_Product_Requirements_Document.md`; product direction is in Part I of the same file).
 
-**Status:** Tasks 1 to 13 are implemented. Tasks 1 to 10 were reviewed as a whole by an independent reviewer, and Tasks 11 and 12 came out of that review. Tasks 11 and 12 were then reviewed in turn, which led to Task 13; Task 13 itself has not been independently reviewed. Where the implementation departed from the task text, the Execution Notes section near the end records what was done and why.
+**Status:** Complete. Tasks 1 to 13 are implemented. Tasks 1 to 10 were reviewed as a whole by an independent reviewer, and Tasks 11 and 12 came out of that review. Tasks 11 and 12 were then reviewed in turn, which led to Task 13. Task 13 itself has not been independently reviewed; its guard was checked by the randomised stability evidence test that improvement plan 002 added. Where the implementation departed from the task text, the Execution Notes section near the end records what was done and why. Work after this plan is summarised in "After This Plan" and tracked in `plans/README.md`.
 
 ## Global Constraints
 
@@ -827,8 +827,32 @@ These record where the implementation of Tasks 1 to 11 departed from the task te
 - **Metrics (Task 6).** An empty trajectory returns `MetricOverflow`; it cannot occur through the public API.
 - **Model tests (Tasks 7 and 8).** `sir_first_step_matches_model_equations` and `seir_first_step_matches_model_equations` were added after the final review, because no listed test would have caught a wrong transmission term.
 - **Convergence (Task 9).** The fixtures use the nonlinear models against a run at 1/64 day. Measured error-reduction factors: 13.9 and 14.9 for SIR, 15.6 and 15.8 for SEIR.
-- **Release work (Task 10).** Criterion 0.7 is used with default features off except `cargo_bench_support`. `Cargo.toml` has an `include` list so only the crate and its documentation are packaged. The benchmark baseline is in `docs/architecture.md`; its three workloads use different timesteps so that each covers 120 to 200 simulated days. The Rust examples in `README.md` and `docs/api_design.md` run as doctests. No licence has been chosen.
+- **Release work (Task 10).** Criterion 0.7 is used with default features off except `cargo_bench_support`. `Cargo.toml` has an `include` list so only the crate and its documentation are packaged. The benchmark baseline is in `docs/architecture.md`; its three workloads use different timesteps so that each covers 120 to 200 simulated days. The Rust examples in `README.md` and `docs/api_design.md` run as doctests. No licence had been chosen at the time; improvement plan 001 later added the MIT licence.
 - **Self-review numbering.** In the checklist below, the model equations are Tasks 7 and 8 and the non-finite `R0` test is Task 6.
+
+---
+
+## After This Plan
+
+The task text and the API contracts above are kept as written. Later changes came through improvement plans 001 to 007. The advisor wrote them in `plans/`, executor agents carried them out, and the advisor reviewed each one. `plans/` is in the working copy and is not committed. On `master` (`aa5d7fb`) these plans changed the contracts as follows:
+
+| Plan | Change to the contracts above |
+|---|---|
+| 001 | MIT licence, package metadata, GitHub Actions CI on stable and on Rust 1.85.0 |
+| 002 | `tests/stability_evidence_tests.rs`, the ignored measurement behind the stability limit |
+| 003 | `SimulationSettings` gains `record_every`, with `with_record_every` and `record_every()`, and the error `InvalidRecordInterval`. The trajectory holds every N-th step plus the initial and final states. |
+| 004 | `estimate_sir_step_error`, `estimate_seir_step_error` and `StepErrorEstimate`, in `src/accuracy.rs` |
+| 005 | `EpidemicMetrics` gains `herd_immunity_threshold` and `final_size_fraction`. `SirParameters` and `SeirParameters` gain `effective_reproduction_number`, which is model-derived and is not `Rt`. |
+| 006 | Examples `outbreak_curve` and `r0_sweep` |
+| 007 | Design spike for SIS, SIRS and SEIRS (`design/007-waning-immunity-models.md`); no code change |
+
+The test suite grew from the 80 tests at the end of Task 13 to 110 passed and 2 ignored.
+
+Planned next, as build plans 008 to 012, accepted on November 13, 2026 and not yet carried out. Each lists its own exact contract changes:
+
+- `Observation` gains `cumulative_infections`, integrated as `dC/dt = beta * S * I / N`. The driver treats the last array entry as that accumulator, outside the population checks.
+- `EpidemicMetrics` becomes `#[non_exhaustive]`. `herd_immunity_threshold` and `final_size_fraction` become `Option<f64>`, and `endemic_prevalence` is added.
+- New public models: `simulate_sis`, `simulate_sirs` and `simulate_seirs`, with their parameter types and step-error estimates. SIRS reuses `SirState` and SEIRS reuses `SeirState`.
 
 ---
 
@@ -883,4 +907,4 @@ These record where the implementation of Tasks 1 to 11 departed from the task te
 
 ## Execution Handoff
 
-This plan is intended to be executed in order, with one focused test cycle and commit per task. Implementation must begin only after the product and technical specification documents are present in the repository and this plan has been reviewed.
+This plan was executed in order, with one focused test cycle and commit per task, after the product and technical specification documents were in the repository and the plan had been reviewed. It is complete; new work is planned in `plans/`.
