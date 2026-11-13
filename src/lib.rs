@@ -1,22 +1,25 @@
 //! A lightweight epidemiological simulation engine.
 //!
-//! The crate integrates two deterministic compartmental models with a
-//! fixed-step classical fourth-order Runge-Kutta solver:
+//! The crate integrates deterministic compartmental models with a fixed-step
+//! classical fourth-order Runge-Kutta solver:
 //!
 //! - [`simulate_sir`]: susceptible, infected, recovered.
 //! - [`simulate_seir`]: susceptible, exposed, infected, recovered.
+//! - [`simulate_sis`]: susceptible, infected, and susceptible again, with no
+//!   immunity.
 //!
-//! Both take rate parameters in inverse days, an initial state in population
+//! Each takes rate parameters in inverse days, an initial state in population
 //! counts, and [`SimulationSettings`] in days. They return a
 //! [`SimulationResult`] holding the full trajectory, [`EpidemicMetrics`], and
 //! [`SimulationDiagnostics`], or a [`SimulationError`].
 //!
 //! A fixed-step solver does not report how accurate a run is. To estimate
-//! the error the timestep introduces, use [`estimate_sir_step_error`] or
-//! [`estimate_seir_step_error`].
+//! the error the timestep introduces, use [`estimate_sir_step_error`],
+//! [`estimate_seir_step_error`] or [`estimate_sis_step_error`].
 //!
 //! The models assume a closed, homogeneously mixing population, constant
-//! parameters, permanent immunity, and frequency-dependent transmission. The
+//! parameters, and frequency-dependent transmission. Recovery gives permanent
+//! immunity in SIR and SEIR and none in SIS. The
 //! results describe the model under those assumptions; they are not
 //! forecasts or estimates of a real outbreak.
 
@@ -39,6 +42,7 @@ pub use error::SimulationError;
 pub use metrics::EpidemicMetrics;
 pub use models::seir::{SeirParameters, SeirState, estimate_seir_step_error, simulate_seir};
 pub use models::sir::{SirParameters, SirState, estimate_sir_step_error, simulate_sir};
+pub use models::sis::{SisParameters, SisState, estimate_sis_step_error, simulate_sis};
 pub use result::{Observation, SimulationDiagnostics, SimulationResult};
 pub use settings::SimulationSettings;
 

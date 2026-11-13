@@ -1,6 +1,9 @@
 use crate::accuracy::{StepErrorEstimate, estimate_step_error};
 use crate::error::SimulationError;
-use crate::metrics::{basic_reproduction_number, calculate_metrics, effective_reproduction_number};
+use crate::metrics::{
+    basic_reproduction_number, calculate_metrics, effective_reproduction_number,
+    final_size_fraction, herd_immunity_threshold,
+};
 use crate::result::SimulationResult;
 use crate::settings::SimulationSettings;
 use crate::simulation::driver::run_simulation;
@@ -184,15 +187,21 @@ pub fn simulate_sir(
         },
         &["susceptible", "infected", "recovered"],
     )?;
-    let metrics = calculate_metrics(
+    let mut metrics = calculate_metrics(
         &output.trajectory,
         population,
         beta_per_day,
         gamma_per_day,
-        |state| state.susceptible,
         |state| state.infected,
-        initial_state.infected,
     )?;
+    let r0 = metrics.basic_reproduction_number;
+    metrics.herd_immunity_threshold = Some(herd_immunity_threshold(r0));
+    metrics.final_size_fraction = Some(final_size_fraction(
+        initial_state.susceptible,
+        initial_state.infected,
+        population,
+        r0,
+    ));
     Ok(SimulationResult {
         trajectory: output.trajectory,
         metrics,

@@ -41,6 +41,11 @@ pub struct EpidemicMetrics {
     /// equation. `cumulative_incidence_fraction` approaches it as the
     /// simulated duration grows. `Some` for SIR and SEIR.
     pub final_size_fraction: Option<f64>,
+    /// Fraction of the population infected once the model settles at its
+    /// endemic equilibrium, `I* / N`, or 0 when `R0 <= 1`. It follows from the
+    /// parameters alone, like `basic_reproduction_number`. `Some` for models
+    /// in which people become susceptible again: SIS.
+    pub endemic_prevalence: Option<f64>,
 }
 
 /// Theoretical `R0 = beta / gamma`, or [`SimulationError::MetricOverflow`] if
@@ -115,22 +120,17 @@ pub(crate) fn final_size_fraction(susceptible: f64, seed: f64, population: f64, 
     (susceptible - high) / population
 }
 
-/// Derives the metrics from a recorded trajectory, returning
-/// [`SimulationError::MetricOverflow`] if any input or result is not finite.
-///
-/// `initially_infected` is the number infected, plus for SEIR exposed, at the
-/// start; it seeds the final size.
-pub(crate) fn calculate_metrics<S, FS, FI>(
+/// Derives the metrics every model shares from a recorded trajectory,
+/// returning [`SimulationError::MetricOverflow`] if any input or result is not
+/// finite. The model-specific metrics are `None`; each model fills in its own.
+pub(crate) fn calculate_metrics<S, FI>(
     trajectory: &[Observation<S>],
     initial_population: f64,
     beta_per_day: f64,
     gamma_per_day: f64,
-    susceptible_of: FS,
     infectious_of: FI,
-    initially_infected: f64,
 ) -> Result<EpidemicMetrics, SimulationError>
 where
-    FS: Fn(&S) -> f64,
     FI: Fn(&S) -> f64,
 {
     let finite = |value: f64| {
@@ -157,25 +157,20 @@ where
         .find(|observation| infectious_of(&observation.state) >= peak_infectious - tolerance)
         .map_or(first.time_days, |observation| observation.time_days);
 
-    let initial_susceptible = finite(susceptible_of(&first.state))?;
     let cumulative_infections_since_start =
         finite(last.cumulative_infections - first.cumulative_infections)?;
     let r0 = basic_reproduction_number(beta_per_day, gamma_per_day)?;
     Ok(EpidemicMetrics {
         basic_reproduction_number: r0,
-        herd_immunity_threshold: Some(herd_immunity_threshold(r0)),
+        herd_immunity_threshold: None,
         peak_infectious,
         peak_infectious_time_days,
         cumulative_infections_since_start,
         cumulative_incidence_fraction: finite(
             cumulative_infections_since_start / initial_population,
         )?,
-        final_size_fraction: Some(final_size_fraction(
-            initial_susceptible,
-            initially_infected,
-            initial_population,
-            r0,
-        )),
+        final_size_fraction: None,
+        endemic_prevalence: None,
     })
 }
 
@@ -192,8 +187,7 @@ mod tests {
         (3.0, 650.0, 40.0),
     ];
 
-    /// Metrics of a hand-built trajectory in a population of 1000, with the
-    /// first observation's infectious count as the initial seed and, as in
+    /// Metrics of a hand-built trajectory in a population of 1000, with, as in
     /// SIR, the drop in susceptibles as the cumulative infections.
     fn metrics(
         points: &[(f64, f64, f64)],
@@ -208,15 +202,12 @@ mod tests {
                 state: [susceptible, infectious],
             })
             .collect();
-        let seed = points.first().map_or(0.0, |&(_, _, infectious)| infectious);
         calculate_metrics(
             &trajectory,
             1000.0,
             beta_per_day,
             gamma_per_day,
-            |state| state[0],
-            |state| state[1],
-            seed,
+            |state: &[f64; 2]| state[1],
         )
     }
 
@@ -278,16 +269,7 @@ mod tests {
                 cumulative_infections: infections,
                 state: [500.0, 100.0],
             });
-        let metrics = calculate_metrics(
-            &trajectory,
-            1000.0,
-            0.5,
-            0.25,
-            |state| state[0],
-            |state| state[1],
-            100.0,
-        )
-        .unwrap();
+        let metrics = calculate_metrics(&trajectory, 1000.0, 0.5, 0.25, |state| state[1]).unwrap();
         assert_eq!(metrics.cumulative_infections_since_start, 70.0);
         assert_eq!(metrics.cumulative_incidence_fraction, 0.07);
     }
@@ -296,6 +278,14 @@ mod tests {
     fn metrics_calculate_cumulative_incidence_fraction() {
         let metrics = metrics(&EPIDEMIC, 0.5, 0.25).unwrap();
         assert_eq!(metrics.cumulative_incidence_fraction, 0.34);
+    }
+
+    #[test]
+    fn metrics_leave_model_specific_metrics_to_the_model() {
+        let metrics = metrics(&EPIDEMIC, 0.5, 0.25).unwrap();
+        assert_eq!(metrics.herd_immunity_threshold, None);
+        assert_eq!(metrics.final_size_fraction, None);
+        assert_eq!(metrics.endemic_prevalence, None);
     }
 
     #[test]
@@ -347,8 +337,6 @@ mod tests {
         for r0 in [1.0, 0.8, 0.0] {
             assert_eq!(herd_immunity_threshold(r0), 0.0, "R0 {r0}");
         }
-        let metrics = metrics(&EPIDEMIC, 0.5, 0.25).unwrap();
-        assert_eq!(metrics.herd_immunity_threshold, Some(0.5));
     }
 
     #[test]
@@ -378,12 +366,6 @@ mod tests {
         // gives z = 0.796812...
         let fraction = final_size_fraction(1e9 - 1.0, 1.0, 1e9, 2.0);
         assert!((fraction - 0.796_812).abs() < 1e-6, "{fraction}");
-
-        let metrics = metrics(&EPIDEMIC, 0.5, 0.25).unwrap();
-        assert_eq!(
-            metrics.final_size_fraction,
-            Some(final_size_fraction(990.0, 10.0, 1000.0, 2.0))
-        );
     }
 
     #[test]

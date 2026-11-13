@@ -1,11 +1,17 @@
 //! Evidence for the timestep stability limit.
 //!
-//! `simulate_sir` and `simulate_seir` reject a run when the model's fastest
-//! decay rate times the step exceeds 2. That limit was chosen from
+//! `simulate_sir`, `simulate_seir` and `simulate_sis` reject a run when the
+//! model's fastest decay rate times the step exceeds 2. That limit was chosen from
 //! measurement, not derived, so this file keeps the measurement runnable.
 //! It draws random configurations, runs each one at a step of one day and
 //! again at 1/64 day, and counts accepted runs whose coarse result is
 //! qualitatively wrong.
+//!
+//! The SIS rows reuse the SIR draws, so adding them changed no other row. The
+//! exact SIS solution is logistic: `I` moves monotonically towards its
+//! equilibrium `I*` and never crosses it, and the cumulative infections never
+//! fall. A run is flagged if it breaks either property, or if its incidence
+//! or final infected fraction misses the fine run by more than 0.1.
 //!
 //! The measurement is ignored by default because it needs a release build to
 //! finish in about a minute. `docs/numerical_methods.md` quotes its result.
@@ -19,8 +25,8 @@
 //! while this one detects both.
 
 use episim_core::{
-    SeirParameters, SeirState, SimulationSettings, SirParameters, SirState, simulate_seir,
-    simulate_sir,
+    SeirParameters, SeirState, SimulationSettings, SirParameters, SirState, SisParameters,
+    SisState, simulate_seir, simulate_sir, simulate_sis,
 };
 
 const POPULATION: f64 = 1000.0;
@@ -48,6 +54,7 @@ impl Generator {
 struct Evidence {
     accepted_sir: u32,
     accepted_seir: u32,
+    accepted_sis: u32,
     /// One line per accepted run that is qualitatively wrong.
     flagged: Vec<String>,
 }
@@ -147,6 +154,47 @@ fn gather(configurations: u32) -> Evidence {
                 ));
             }
         }
+
+        let parameters = SisParameters {
+            beta_per_day: beta,
+            gamma_per_day: gamma,
+        };
+        let initial = SisState {
+            susceptible: POPULATION * a / (a + b),
+            infected: POPULATION * b / (a + b),
+        };
+        if let (Ok(run), Ok(reference)) = (
+            simulate_sis(parameters, initial, coarse),
+            simulate_sis(parameters, initial, fine),
+        ) {
+            evidence.accepted_sis += 1;
+            let equilibrium = run.metrics.endemic_prevalence.unwrap() * POPULATION;
+            let wrong_direction = run.trajectory.windows(2).any(|pair| {
+                let (before, after) = (pair[0].state.infected, pair[1].state.infected);
+                // Away from the equilibrium, or across it.
+                (after - equilibrium).abs() > (before - equilibrium).abs() + TOLERANCE
+                    || ((before - equilibrium) * (after - equilibrium) < 0.0
+                        && (after - equilibrium).abs() > TOLERANCE)
+                    || pair[1].cumulative_infections < pair[0].cumulative_infections - TOLERANCE
+            });
+            let incidence_error = (run.metrics.cumulative_incidence_fraction
+                - reference.metrics.cumulative_incidence_fraction)
+                .abs();
+            let final_error = (run.trajectory.last().unwrap().state.infected
+                - reference.trajectory.last().unwrap().state.infected)
+                .abs()
+                / POPULATION;
+            if wrong_direction
+                || incidence_error > MAX_INCIDENCE_ERROR
+                || final_error > MAX_INCIDENCE_ERROR
+            {
+                evidence.flagged.push(format!(
+                    "SIS {parameters:?} {initial:?} duration {duration}: \
+                     wrong direction {wrong_direction}, incidence error {incidence_error}, \
+                     final error {final_error}"
+                ));
+            }
+        }
     }
     evidence
 }
@@ -156,9 +204,10 @@ fn gather(configurations: u32) -> Evidence {
 fn full_stability_evidence() {
     let evidence = gather(250_000);
     println!(
-        "accepted SIR runs: {}, accepted SEIR runs: {}, flagged: {}",
+        "accepted SIR runs: {}, accepted SEIR runs: {}, accepted SIS runs: {}, flagged: {}",
         evidence.accepted_sir,
         evidence.accepted_seir,
+        evidence.accepted_sis,
         evidence.flagged.len()
     );
     assert!(
@@ -171,5 +220,6 @@ fn full_stability_evidence() {
         "{}",
         evidence.accepted_seir
     );
+    assert!(evidence.accepted_sis >= 80_000, "{}", evidence.accepted_sis);
     assert!(evidence.flagged.is_empty(), "{:#?}", evidence.flagged);
 }
