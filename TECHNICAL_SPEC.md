@@ -8,7 +8,7 @@
 **Language:** Rust  
 **Edition:** 2024  
 **Minimum Supported Rust Version:** 1.85  
-**Target Release:** v0.1.0  
+**Target Release:** v0.1.0 (released November 13, 2026); next v0.1.1, compatible with it  
 **Architecture:** Pure Rust Library
 
 **Revision note (0.2).** This specification was written before implementation. Revision 0.2 brings it in line with the code: the manifest, project structure, settings, solver signature, simulation pipeline, error variants, tests, quality pipeline, decisions register and resolved questions. Sections already updated by later changes (the recording interval, the stability limit, the step-error estimate and the threshold quantities) are unchanged. Where a section still describes the original proposal, it says so.
