@@ -9,6 +9,13 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The next minor release. Under Cargo's rules for 0.x versions it may change
 the public API; every breaking change is listed here.
 
+### Fixed
+
+- `endemic_prevalence` is 0 for SIS, SIRS and SEIRS runs that start with
+  nobody infected (for SEIRS, nobody exposed or infected). It used to report
+  the endemic level, `1 - 1/R0` for SIS, although such a run never leaves
+  the disease-free state.
+
 ## [0.1.0] - 2026-11-13
 
 The first version. Tagged `v0.1.0`; not published to crates.io.

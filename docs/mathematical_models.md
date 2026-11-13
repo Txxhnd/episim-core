@@ -195,7 +195,7 @@ case data.
 | `cumulative_infections_since_start` | `C(T)`, where `T` is the final simulation time; in SIR and SEIR this is `S(0) - S(T)`. Infections already present at day zero are not counted. |
 | `cumulative_incidence_fraction` | `C(T) / N(0)`: new infections per head of the initial population. In SIR and SEIR it is also the fraction of people newly infected. In SIS, SIRS and SEIRS it counts reinfections and can exceed 1. |
 | `final_size_fraction` | `(S(0) - S(inf)) / N(0)`: the fraction newly infected by the time the epidemic is over, from the final size equation below. An `Option`, `Some` for SIR and SEIR. |
-| `endemic_prevalence` | `I* / N`, or 0 when `R0 <= 1`: the fraction infected once the model settles at its endemic equilibrium. It is `1 - 1/R0` for SIS and `(1 - 1/R0) * omega / (omega + gamma)` for SIRS, and `(1 - 1/R0) / (1 + gamma/sigma + gamma/omega)` for SEIRS. It follows from the parameters alone. An `Option`, `Some` for SIS, SIRS and SEIRS. |
+| `endemic_prevalence` | `I* / N`, or 0 when `R0 <= 1` or when nobody is infected (in SEIRS, exposed or infected) at the start: the fraction infected once the model settles at its endemic equilibrium. It is `1 - 1/R0` for SIS and `(1 - 1/R0) * omega / (omega + gamma)` for SIRS, and `(1 - 1/R0) / (1 + gamma/sigma + gamma/omega)` for SEIRS. It follows from the parameters and from whether the run starts with any infection, not from the simulated duration. An `Option`, `Some` for SIS, SIRS and SEIRS. |
 
 The cumulative metrics refer to the final time `T` only. For any earlier
 time `t`, read `cumulative_infections` from the observation at `t`. As `T` grows,
