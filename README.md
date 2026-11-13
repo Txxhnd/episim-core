@@ -83,8 +83,8 @@ cargo run --example r0_sweep
 
 | Field | Contents |
 |---|---|
-| `trajectory` | One `Observation` (time in days plus the model state) for day zero and for every recorded integration step: every step by default, or every N-th step with `SimulationSettings::with_record_every`. The last one is always the final state, exactly at the requested duration. |
-| `metrics` | Basic reproduction number `R0 = beta / gamma` and the herd-immunity threshold `1 - 1/R0`, peak infectious population and the day it is first reached, new infections since the start `S(0) - S(T)` and that number as a fraction of the initial population, and the fraction the model infects by the time the epidemic is over (its final size). |
+| `trajectory` | One `Observation` (time in days, cumulative infections since day zero, and the model state) for day zero and for every recorded integration step: every step by default, or every N-th step with `SimulationSettings::with_record_every`. The last one is always the final state, exactly at the requested duration. |
+| `metrics` | Basic reproduction number `R0 = beta / gamma` and the herd-immunity threshold `1 - 1/R0`, peak infectious population and the day it is first reached, new infections since the start, `C(T)`, and that number as a fraction of the initial population, and the fraction the model infects by the time the epidemic is over (its final size). |
 | `diagnostics` | Steps executed, the largest absolute and relative population drift, and how many recorded values were negative within roundoff tolerance. |
 
 Peak metrics are read from the recorded observations, so their time
@@ -170,7 +170,7 @@ assert!(estimate.max_absolute_error < 1e-3);
 simulation at half the step and compares the two, so it costs about three
 times as much as one run. It measures the error from the step size only,
 not how well the model matches reality.
-Every recorded observation is kept in memory (32 bytes each for SIR, 40 for
+Every recorded observation is kept in memory (40 bytes each for SIR, 48 for
 SEIR). To use a small step without storing every step, record every N-th
 one:
 

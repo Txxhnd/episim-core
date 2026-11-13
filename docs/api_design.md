@@ -15,7 +15,7 @@ private.
 | `SirState`, `SeirState` | struct | Compartment values; used for the initial state and for each observation. |
 | `SimulationSettings` | struct | Duration, timestep, and step limit. |
 | `SimulationResult<S>` | struct | Trajectory, metrics, and diagnostics. |
-| `Observation<S>` | struct | A time in days and the state at that time. |
+| `Observation<S>` | struct | A time in days, the cumulative infections since day zero, and the state at that time. |
 | `EpidemicMetrics` | struct | Model-derived summary metrics. |
 | `SirParameters::effective_reproduction_number`, `SeirParameters::effective_reproduction_number` | method | Model-derived effective reproduction number `R0 * S / N` in a given state. |
 | `SimulationDiagnostics` | struct | Step count, population drift, tolerated negative values. |

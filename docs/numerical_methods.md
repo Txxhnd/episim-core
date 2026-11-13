@@ -18,8 +18,10 @@ k4 = f(y + h   * k3)
 y_next = y + h/6 * (k1 + 2*k2 + 2*k3 + k4)
 ```
 
-The step works on fixed-size arrays (three values for SIR, four for SEIR)
-and allocates nothing. Each stage input, each slope `k1` to `k4`, and
+The step works on fixed-size arrays and allocates nothing. Each array holds
+the compartments followed by the cumulative infection count `C` (four
+values for SIR, five for SEIR), so `C` is integrated with the same step and
+the same RK4 stages as the compartments. Each stage input, each slope `k1` to `k4`, and
 `y_next` is checked for NaN and infinity. A failure is reported as
 `NonFiniteIntermediate { stage }`, where `stage` is `"k1"`, `"k2"`, `"k3"`,
 `"k4"`, or `"final"`.
@@ -73,7 +75,10 @@ records every N-th step and always the final state. If it cannot be reserved, th
 ## Checks on every accepted state
 
 The initial state and the state after every step go through the same
-checks, in this order, whether or not the step is recorded.
+checks, in this order, whether or not the step is recorded. They apply to
+the compartments only. The cumulative infection count is checked for
+finiteness at every RK4 stage like every other value, but it is not a
+compartment, so it is neither sign-checked nor summed into `N(t)`.
 
 1. **Finite values.** A NaN or infinite compartment is an error.
 2. **Negative values.** RK4 does not guarantee non-negative compartments.

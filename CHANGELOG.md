@@ -26,6 +26,9 @@ The first version. It has not been published yet.
 - Model-derived threshold quantities: `effective_reproduction_number` on
   `SirParameters` and `SeirParameters` (`R0 * S / N` in any state), and the
   `herd_immunity_threshold` and `final_size_fraction` metrics.
+- `Observation::cumulative_infections`: new infections since day zero,
+  integrated with the compartments as `dC/dt = beta * S * I / N`.
+  `cumulative_infections_since_start` is its value at the final time.
 - `SimulationResult` with the full trajectory, `EpidemicMetrics` (basic
   reproduction number, peak infectious population and its time, cumulative
   infections, cumulative incidence fraction), and `SimulationDiagnostics`

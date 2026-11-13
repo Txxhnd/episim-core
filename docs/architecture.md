@@ -87,8 +87,9 @@ None of them appears in the public API.
 ## Cost
 
 For a fixed model, run time and memory are both linear in the number of
-steps. Each observation takes 32 bytes for SIR and 40 bytes for SEIR, so a
-1,000,000-step run stores about 32 MB or 40 MB when every step is recorded.
+steps. Each observation takes 40 bytes for SIR and 48 bytes for SEIR (the
+time, the cumulative infections, and the compartments), so a 1,000,000-step
+run stores about 40 MB or 48 MB when every step is recorded.
 
 ## Performance baseline
 
@@ -118,7 +119,9 @@ trajectory reservation, integration, and metric calculation.
 That is roughly 70 to 110 nanoseconds per step. Criterion's interval for the
 1,000,000-step SIR case was 78 to 105 ms, so treat differences of less than
 about 20% as noise on this machine. Memory use was not measured; the
-trajectory accounts for 32 bytes (SIR) or 40 bytes (SEIR) per step.
+trajectory accounted for 32 bytes (SIR) or 40 bytes (SEIR) per step. Since
+then each observation also holds the cumulative infections, 8 bytes more,
+and each step integrates one more value.
 
 The timesteps differ between rows so that each run covers a similar span of
 an active outbreak. An earlier run that kept the timestep at 1/64 day and

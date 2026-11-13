@@ -38,6 +38,20 @@ fixed for the whole run; it is not recomputed from the evolving state. The
 code evaluates `S / N` first, which avoids multiplying two large population
 values together.
 
+### Cumulative infections
+
+Both models also integrate the number of new infections since day zero,
+
+```text
+dC/dt = beta * S * I / N,    C(0) = 0
+```
+
+`C` is not a compartment: nobody moves into or out of it, and it is not part
+of `N`. Each observation reports it as `cumulative_infections`. In SIR and
+SEIR everyone who leaves `S` is infected, so `C(t) = S(0) - S(t)` exactly. A
+model in which people can be infected again would count each infection, so
+`C` could then exceed `N`.
+
 ## SIR
 
 Compartments: susceptible `S`, infected (infectious) `I`, recovered `R`.
@@ -96,12 +110,12 @@ case data.
 | `herd_immunity_threshold` | `1 - 1/R0`, or 0 when `R0 <= 1`: the fraction of the population that must be immune for the infected to decline. |
 | `peak_infectious` | The largest `I` among the recorded observations. |
 | `peak_infectious_time_days` | The time of the earliest recorded observation at that peak. If `I` never rises above its initial value, this is day zero. |
-| `cumulative_infections_since_start` | `S(0) - S(T)`, where `T` is the final simulation time. Infections already present at day zero are not counted. |
-| `cumulative_incidence_fraction` | `(S(0) - S(T)) / N(0)`. |
+| `cumulative_infections_since_start` | `C(T)`, where `T` is the final simulation time; in SIR and SEIR this is `S(0) - S(T)`. Infections already present at day zero are not counted. |
+| `cumulative_incidence_fraction` | `C(T) / N(0)`: new infections per head of the initial population. In SIR and SEIR it is also the fraction of people newly infected. |
 | `final_size_fraction` | `(S(0) - S(inf)) / N(0)`: the fraction newly infected by the time the epidemic is over, from the final size equation below. |
 
 The cumulative metrics refer to the final time `T` only. For any earlier
-time `t`, compute `S(0) - S(t)` from the trajectory. As `T` grows,
+time `t`, read `cumulative_infections` from the observation at `t`. As `T` grows,
 `cumulative_incidence_fraction` approaches `final_size_fraction`; comparing
 the two shows whether the simulated period covers the whole epidemic.
 

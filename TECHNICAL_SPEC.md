@@ -780,7 +780,7 @@ As implemented, there is no model trait. Each public `simulate_*` function does 
 2. It applies the stability limit and checks that `R0` is finite.
 3. It calls the shared internal driver, `run_simulation` in `src/simulation/driver.rs`.
 
-The driver receives the initial state as a fixed-size array, the fixed population, the settings, the derivative as a closure, a closure that converts an array back into the public state type, and the compartment names used in errors. The driver does steps 4 to 10. It counts the steps and enforces the limit before any allocation, then reserves the trajectory with a fallible reservation and integrates. Each accepted state is checked and recorded at the configured interval. The model function then calculates the metrics (step 11) and assembles the result (step 12).
+The driver receives the initial state as a fixed-size array whose last entry is the cumulative infection count `C` (Section 10.3). It also receives the fixed population, the settings, the derivative as a closure, a closure that converts an array back into the public state type, and the names of the compartments, used in errors. The per-state checks apply to the compartments only; `C` is recorded in each observation. The driver does steps 4 to 10. It counts the steps and enforces the limit before any allocation, then reserves the trajectory with a fallible reservation and integrates. Each accepted state is checked and recorded at the configured interval. The model function then calculates the metrics (step 11) and assembles the result (step 12).
 
 Observation times are computed as `index * step_days`, with the last one set to the duration, rather than by repeated addition. The step count is `duration / step`, reduced by four ulps before rounding up, so that a duration that is a whole number of steps does not gain a step of rounding-error length.
 
@@ -829,11 +829,15 @@ Both functions must use the same internal solver infrastructure. The step-error 
 ```rust
 pub struct Observation<S> {
     pub time_days: f64,
+    pub cumulative_infections: f64,
     pub state: S,
 }
 ```
 
 Each observation represents the model state at a particular simulation time.
+`cumulative_infections` is the number of new infections since day zero. It
+is integrated with the compartments as `dC/dt = beta * S * I / N`, is not a
+compartment, and is excluded from the population conservation check.
 
 ## 10.4 Simulation Result
 
@@ -894,18 +898,18 @@ If multiple observations have the same maximum value, the earliest occurrence is
 ### Cumulative infections since simulation start
 
 \[
-C(t)=S(0)-S(t)
+\frac{dC}{dt}=\beta\frac{S I}{N},\qquad C(0)=0
 \]
 
-This measures newly infected individuals after the simulation begins.
+`C` is integrated with the compartments and reported on every observation as `cumulative_infections`; the metric is its value at the final time. In SIR and SEIR \(C(t)=S(0)-S(t)\). This measures new infections after the simulation begins, and in a model with reinfection it counts every infection.
 
 ### Cumulative incidence fraction
 
 \[
-CI(t)=\frac{S(0)-S(t)}{N(0)}
+CI(t)=\frac{C(t)}{N(0)}
 \]
 
-This represents the cumulative fraction of the initial population newly infected during the simulation.
+This is the number of new infections during the simulation per head of the initial population. In SIR and SEIR it is also the fraction of the initial population newly infected.
 
 The MVP must not present this measure as an epidemiological estimate derived from observed population data.
 

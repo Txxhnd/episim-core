@@ -387,6 +387,36 @@ The SIS closed form is the strongest test available. SIRS and SEIRS have no
 closed form, so they rely on `omega = 0` reducing to SIR and SEIR, on the
 equilibrium, and on convergence order.
 
+## Owner decisions
+
+On 2026-11-13 the owner accepted the recommended answer to all eight
+questions below:
+
+1. `cumulative_infections` lives on `Observation<S>`, for all models.
+2. `cumulative_incidence_fraction` keeps its name; its doc says "per head of
+   the initial population".
+3. One `EpidemicMetrics`, `#[non_exhaustive]`, with `Option` fields for
+   model-specific metrics.
+4. The peak time is the earliest recorded time within `64 * EPSILON * N` of
+   the maximum, for all models.
+5. SIR and SEIR take `cumulative_infections_since_start` from the
+   accumulator.
+6. The SEIRS guard is the plain sum `beta + sigma + gamma + omega`.
+7. Cumulative infections must never step backwards, so the SIS guard keeps
+   `1.25 * gamma`.
+8. The SIRS guard `max(beta + gamma, omega)` stays, and accepted runs that
+   end in a `SimulationError` are acceptable.
+
+Two details changed while writing build plans 008 to 012:
+
+- Plan 008 has no runtime count of leading compartments. Every model has
+  exactly one accumulator, `C`, as the last entry of its state array, so the
+  driver checks `state[..N - 1]` and records `state[N - 1]` in the
+  observation.
+- `endemic_prevalence` is added by plan 010 together with SIS, the first
+  model that reports it, instead of by plan 009 as a field that would always
+  be `None`.
+
 ## Open questions for the owner
 
 1. **Where does `cumulative_infections` live?** On `Observation`, in every
