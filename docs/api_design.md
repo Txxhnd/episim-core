@@ -10,14 +10,15 @@ private.
 |---|---|---|
 | `simulate_sir` | function | Run an SIR simulation. |
 | `simulate_seir` | function | Run an SEIR simulation. |
-| `estimate_sir_step_error`, `estimate_seir_step_error` | function | Estimate the error the timestep introduces, by comparing with a run at half the step. |
-| `SirParameters`, `SeirParameters` | struct | Rate parameters, per day. |
-| `SirState`, `SeirState` | struct | Compartment values; used for the initial state and for each observation. |
+| `simulate_sis` | function | Run an SIS simulation. |
+| `estimate_sir_step_error`, `estimate_seir_step_error`, `estimate_sis_step_error` | function | Estimate the error the timestep introduces, by comparing with a run at half the step. |
+| `SirParameters`, `SeirParameters`, `SisParameters` | struct | Rate parameters, per day. |
+| `SirState`, `SeirState`, `SisState` | struct | Compartment values; used for the initial state and for each observation. |
 | `SimulationSettings` | struct | Duration, timestep, and step limit. |
 | `SimulationResult<S>` | struct | Trajectory, metrics, and diagnostics. |
 | `Observation<S>` | struct | A time in days, the cumulative infections since day zero, and the state at that time. |
 | `EpidemicMetrics` | struct | Model-derived summary metrics. |
-| `SirParameters::effective_reproduction_number`, `SeirParameters::effective_reproduction_number` | method | Model-derived effective reproduction number `R0 * S / N` in a given state. |
+| `SirParameters::effective_reproduction_number`, `SeirParameters::effective_reproduction_number`, `SisParameters::effective_reproduction_number` | method | Model-derived effective reproduction number `R0 * S / N` in a given state. |
 | `SimulationDiagnostics` | struct | Step count, population drift, tolerated negative values. |
 | `StepErrorEstimate` | struct | Estimated largest absolute and relative error of a run. |
 | `SimulationError` | enum | Every failure the library can report. |
@@ -99,7 +100,8 @@ the compiler requires a wildcard arm when you match on it.
 `EpidemicMetrics` is `#[non_exhaustive]` too: it may gain fields, so code
 outside the crate reads its fields but cannot build one with a struct
 literal. Metrics that only some models define, such as
-`herd_immunity_threshold` and `final_size_fraction`, are `Option<f64>`.
+`herd_immunity_threshold`, `final_size_fraction` and `endemic_prevalence`,
+are `Option<f64>`.
 
 Not part of the API in this version: estimation of `Rt` from case data,
 serialization, and user-defined models.

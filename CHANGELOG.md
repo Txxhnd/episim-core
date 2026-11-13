@@ -13,7 +13,10 @@ The first version. It has not been published yet.
 - `simulate_sir` and `simulate_seir`: deterministic SIR and SEIR models with
   frequency-dependent transmission, a closed population, and constant
   parameters.
-- A fixed-step classical fourth-order Runge-Kutta solver shared by both
+- `simulate_sis` and `estimate_sis_step_error`: the SIS model, in which
+  recovery gives no immunity. Its `EpidemicMetrics` report
+  `endemic_prevalence` instead of a herd-immunity threshold and final size.
+- A fixed-step classical fourth-order Runge-Kutta solver shared by all
   models. The final step is shortened so a run ends exactly at the requested
   duration.
 - `SimulationSettings` with a validated duration and timestep, and a step

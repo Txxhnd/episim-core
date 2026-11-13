@@ -1,6 +1,6 @@
 # Mathematical models
 
-`episim-core` implements two deterministic compartmental models. This page
+`episim-core` implements three deterministic compartmental models. This page
 gives their equations, the units and valid ranges of every quantity, the
 assumptions behind them, and the exact definition of each reported metric.
 
@@ -21,7 +21,8 @@ tracks expected counts, not whole individuals.
 1. The population is closed: no births, deaths, or migration.
 2. Individuals mix homogeneously.
 3. Parameters are constant over the simulation.
-4. Recovered individuals are permanently immune.
+4. In SIR and SEIR, recovered individuals are permanently immune. In SIS,
+   recovery gives no immunity.
 5. Only the infected compartment transmits infection.
 6. The dynamics are deterministic.
 
@@ -40,7 +41,7 @@ values together.
 
 ### Cumulative infections
 
-Both models also integrate the number of new infections since day zero,
+Every model also integrates the number of new infections since day zero,
 
 ```text
 dC/dt = beta * S * I / N,    C(0) = 0
@@ -48,9 +49,9 @@ dC/dt = beta * S * I / N,    C(0) = 0
 
 `C` is not a compartment: nobody moves into or out of it, and it is not part
 of `N`. Each observation reports it as `cumulative_infections`. In SIR and
-SEIR everyone who leaves `S` is infected, so `C(t) = S(0) - S(t)` exactly. A
-model in which people can be infected again would count each infection, so
-`C` could then exceed `N`.
+SEIR everyone who leaves `S` is infected, so `C(t) = S(0) - S(t)` exactly. In
+SIS people are infected again and again; `C` counts each infection, so it
+can exceed `N`.
 
 ## SIR
 
@@ -87,6 +88,33 @@ dR/dt =  gamma * I
 | `sigma_per_day` | rate of progression from exposed to infectious | finite, `> 0` |
 | `gamma_per_day` | recovery rate | finite, `> 0` |
 
+## SIS
+
+Compartments: susceptible `S` and infected (infectious) `I`. Recovered
+individuals return to `S` at once, so nobody is ever immune and people can
+be infected again and again.
+
+```text
+dS/dt = -beta * S * I / N + gamma * I
+dI/dt =  beta * S * I / N - gamma * I
+```
+
+| Parameter | Meaning | Valid range |
+|---|---|---|
+| `beta_per_day` | transmission rate | finite, `>= 0` |
+| `gamma_per_day` | recovery rate, back to susceptible | finite, `> 0` |
+
+With `S = N - I` this is the logistic equation. With `r = beta - gamma`,
+`I* = N (1 - 1/R0)` and `A = I* / I(0) - 1`, its solution is
+
+```text
+I(t) = I* / (1 + A * exp(-r t))
+```
+
+`I` moves monotonically towards `I*` and never crosses it. When `R0 > 1` the
+infection becomes endemic at `I*`; when `R0 <= 1` it dies out. The formula
+holds in both cases, with `I* < 0` when `R0 < 1`.
+
 ## Initial state
 
 Every compartment must be finite and non-negative. Their sum `N` must be
@@ -95,7 +123,7 @@ compartments can still add up to infinity.
 
 ## Population conservation
 
-In both models the derivatives sum to zero, so `N(t) = N(0)` for the exact
+In every model the derivatives of the compartments sum to zero, so `N(t) = N(0)` for the exact
 solution. The library checks this after every integration step; see
 [numerical methods](numerical_methods.md).
 
@@ -106,18 +134,26 @@ case data.
 
 | Metric | Definition |
 |---|---|
-| `basic_reproduction_number` | `R0 = beta / gamma`, for both models. The theoretical number of secondary infections from one case in a fully susceptible population. |
+| `basic_reproduction_number` | `R0 = beta / gamma`, for every model. The theoretical number of secondary infections from one case in a fully susceptible population. |
 | `herd_immunity_threshold` | `1 - 1/R0`, or 0 when `R0 <= 1`: the fraction of the population that must be immune for the infected to decline. An `Option`, `Some` for SIR and SEIR. |
 | `peak_infectious` | The largest `I` among the recorded observations. |
 | `peak_infectious_time_days` | The time of the earliest recorded observation within `64 * f64::EPSILON * max(N0, 1)` individuals of that peak. If `I` never rises above its initial value by more than that, this is day zero. The tolerance matters only where `I` levels off at its peak; there roundoff alone would decide which observation is largest. |
 | `cumulative_infections_since_start` | `C(T)`, where `T` is the final simulation time; in SIR and SEIR this is `S(0) - S(T)`. Infections already present at day zero are not counted. |
-| `cumulative_incidence_fraction` | `C(T) / N(0)`: new infections per head of the initial population. In SIR and SEIR it is also the fraction of people newly infected. |
+| `cumulative_incidence_fraction` | `C(T) / N(0)`: new infections per head of the initial population. In SIR and SEIR it is also the fraction of people newly infected. In SIS it counts reinfections and can exceed 1. |
 | `final_size_fraction` | `(S(0) - S(inf)) / N(0)`: the fraction newly infected by the time the epidemic is over, from the final size equation below. An `Option`, `Some` for SIR and SEIR. |
+| `endemic_prevalence` | `I* / N = 1 - 1/R0`, or 0 when `R0 <= 1`: the fraction infected once the model settles at its endemic equilibrium. It follows from the parameters alone. An `Option`, `Some` for SIS. |
 
 The cumulative metrics refer to the final time `T` only. For any earlier
 time `t`, read `cumulative_infections` from the observation at `t`. As `T` grows,
 `cumulative_incidence_fraction` approaches `final_size_fraction`; comparing
 the two shows whether the simulated period covers the whole epidemic.
+
+SIS has no final size and no herd-immunity threshold, because nobody becomes
+immune; both are `None`. Its long-run quantity is `endemic_prevalence`. In
+SIS, `1 - 1/R0` is the endemic prevalence: at the equilibrium a fraction
+`1/R0` is susceptible and the rest are infected. The infected rise towards
+`I*` and level off there, so `peak_infectious_time_days` is the time they
+come within roundoff of it.
 
 ## Effective reproduction number
 
@@ -125,17 +161,21 @@ the two shows whether the simulated period covers the whole epidemic.
 effective R = R0 * S / N
 ```
 
-`SirParameters::effective_reproduction_number` and
-`SeirParameters::effective_reproduction_number` compute it for any state,
+`SirParameters::effective_reproduction_number`,
+`SeirParameters::effective_reproduction_number` and
+`SisParameters::effective_reproduction_number` compute it for any state,
 with `N` taken as the total of that state. It is the average number of
 people one infected person infects while a fraction `S / N` of the
 population is still susceptible. It sets the direction of the epidemic
 exactly:
 
 ```text
-SIR:   dI/dt       = gamma * I * (effective R - 1)
-SEIR:  d(E + I)/dt = gamma * I * (effective R - 1)
+SIR, SIS:  dI/dt       = gamma * I * (effective R - 1)
+SEIR:      d(E + I)/dt = gamma * I * (effective R - 1)
 ```
+
+In SIS the susceptibles grow again as people recover, so effective R does
+not keep falling: it tends to 1 as the infection settles at `I*`.
 
 So in SIR the infected peak exactly when effective R falls to 1, which is
 when the susceptible fraction falls to `1 / R0`. The herd-immunity threshold
@@ -149,7 +189,7 @@ not model.
 ## Final size
 
 Dividing `dS/dt = -beta * S * I / N` by `dR/dt = gamma * I` gives
-`dS/dR = -R0 * S / N`, in both models. Every exact solution therefore
+`dS/dR = -R0 * S / N`, in SIR and SEIR. Every exact solution therefore
 satisfies
 
 ```text

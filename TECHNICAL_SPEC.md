@@ -269,7 +269,8 @@ episim-core/
 │   ├── models/
 │   │   ├── mod.rs
 │   │   ├── sir.rs
-│   │   └── seir.rs
+│   │   ├── seir.rs
+│   │   └── sis.rs
 │   │
 │   ├── solver/
 │   │   ├── mod.rs
@@ -283,6 +284,7 @@ episim-core/
 │   ├── crate_smoke_test.rs
 │   ├── sir_tests.rs
 │   ├── seir_tests.rs
+│   ├── sis_tests.rs
 │   ├── validation_tests.rs
 │   ├── numerical_tests.rs
 │   ├── convergence_tests.rs
@@ -322,6 +324,7 @@ The unit tests of private code (solver, driver, validators, metric calculation) 
 | `accuracy.rs` | Step-error estimate |
 | `models/sir.rs` | SIR equations and model implementation |
 | `models/seir.rs` | SEIR equations and model implementation |
+| `models/sis.rs` | SIS equations and model implementation |
 | `solver/rk4.rs` | Numerical integration |
 | `simulation/driver.rs` | Simulation orchestration |
 
@@ -442,6 +445,16 @@ The population size remains constant throughout the simulation.
 
 It must not be recalculated as the simulation progresses because doing so could introduce unintended changes in the transmission formulation.
 
+## 5.7 Waning-Immunity Models
+
+These follow `design/007-waning-immunity-models.md`. Their equations are in `docs/mathematical_models.md`. Each has its own parameter type, and reuses a state type where the compartments are the same:
+
+| Model | Parameters | State |
+|---|---|---|
+| SIS | `SisParameters { beta_per_day, gamma_per_day }` | `SisState { susceptible, infected }` |
+
+Validation is that of SIR. The total population is the sum of the initial compartments.
+
 ---
 
 # 6. Simulation Configuration
@@ -544,8 +557,9 @@ The engine must reject a configuration, before integration begins, when the mode
 |---|---|
 | SIR | `max(beta, gamma)` |
 | SEIR | `max(beta, (sigma + gamma) / 2 + sqrt(((sigma - gamma) / 2)^2 + sigma * beta))` |
+| SIS | `max(beta + gamma, 1.25 * gamma)` |
 
-Susceptibles empty at up to beta per day. In SEIR the exposed and infected compartments feed each other (progression moves exposed to infected, transmission creates exposed from infected), so the pair decays faster than sigma or gamma alone. The second SEIR term is the fast eigenvalue of that pair in a fully susceptible population, where the coupling is strongest. Checking each rate separately is not sufficient: with beta = 1.0, sigma = 0.25, gamma = 2.78, and a step of one day, every single product is below 2.785, yet the run reports a peak of 370 infected where the correct peak is the initial 100.
+In SIS, `beta + gamma` is the decay rate of a small departure from the state with everyone infected, and the `1.25 * gamma` floor keeps the RK4 increment of the cumulative infections from turning negative, which it does above `gamma * h` of about 1.62. Susceptibles empty at up to beta per day. In SEIR the exposed and infected compartments feed each other (progression moves exposed to infected, transmission creates exposed from infected), so the pair decays faster than sigma or gamma alone. The second SEIR term is the fast eigenvalue of that pair in a fully susceptible population, where the coupling is strongest. Checking each rate separately is not sufficient: with beta = 1.0, sigma = 0.25, gamma = 2.78, and a step of one day, every single product is below 2.785, yet the run reports a peak of 370 infected where the correct peak is the initial 100.
 
 The step compared with the limit is the step actually taken, `min(step_days, duration_days)`. A product exactly equal to 2 is accepted.
 
@@ -741,7 +755,7 @@ Derivative array:
 
 ## 8.3 Important Mathematical Invariant
 
-For both models:
+For every model, the derivatives of the compartments sum to zero:
 
 \[
 \sum_i \frac{dX_i}{dt}=0
@@ -867,6 +881,7 @@ pub struct EpidemicMetrics {
     pub cumulative_infections_since_start: f64,
     pub cumulative_incidence_fraction: f64,
     pub final_size_fraction: Option<f64>,
+    pub endemic_prevalence: Option<f64>,
 }
 ```
 
@@ -939,6 +954,18 @@ where seed is the number infected (plus, for SEIR, exposed) at the start. With a
 \[
 \text{final size fraction}=\frac{S(0)-S(\infty)}{N(0)}
 \]
+
+It is `Some` for SIR and SEIR, and `None` for SIS, which has no final state.
+
+### Endemic prevalence
+
+For SIS, the fraction infected at the endemic equilibrium:
+
+\[
+\frac{I^*}{N}=\begin{cases}1-\dfrac{1}{R_0} & R_0>1\\[4pt] 0 & R_0\le 1\end{cases}
+\]
+
+It follows from the parameters alone. It is `None` for SIR and SEIR. The herd-immunity threshold is `None` for SIS, because nobody becomes immune.
 
 ## 10.6 Reproduction Numbers
 
@@ -1260,7 +1287,7 @@ The release acceptance threshold is a conservative error-reduction factor of at 
 cargo test --release --test stability_evidence_tests -- --ignored --nocapture
 ```
 
-It reports 226,590 accepted SIR runs and 107,633 accepted SEIR runs, none flagged. A smaller sample in the normal test suite was tried and rejected: with 500 configurations it could detect neither a loosened limit nor a missing coupled SEIR rate.
+It reports 226,590 accepted SIR runs, 107,633 accepted SEIR runs and 108,560 accepted SIS runs, none flagged. The SIS rows reuse the SIR draws. They flag a run whose infected move away from or across their equilibrium, or whose cumulative infections fall. A smaller sample in the normal test suite was tried and rejected: with 500 configurations it could detect neither a loosened limit nor a missing coupled SEIR rate.
 
 ## 13.5 Population Conservation Tests
 
@@ -1504,7 +1531,7 @@ A sixth week may be used to resolve numerical validation failures or revise publ
 | TD-15 | Step-error estimate by step halving | Implemented (Section 12.5) |
 | TD-16 | Model-derived threshold quantities; no `Rt` estimation | Implemented (Sections 10.5, 10.6) |
 | TD-17 | MIT licence; MSRV 1.85 checked in CI | Implemented |
-| TD-18 | SIS, SIRS and SEIRS per `design/007-waning-immunity-models.md` | Accepted November 13, 2026; not yet implemented |
+| TD-18 | SIS, SIRS and SEIRS per `design/007-waning-immunity-models.md` | SIS implemented; SIRS and SEIRS accepted, not yet implemented |
 
 ---
 

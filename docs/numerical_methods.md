@@ -119,12 +119,18 @@ compartment, so it is neither sign-checked nor summed into `N(t)`.
   |---|---|
   | SIR | `max(beta, gamma)` |
   | SEIR | `max(beta, (sigma + gamma) / 2 + sqrt(((sigma - gamma) / 2)^2 + sigma * beta))` |
+  | SIS | `max(beta + gamma, 1.25 * gamma)` |
 
   Susceptibles empty at up to `beta` per day. In SEIR the exposed and
   infected compartments feed each other, so together they decay faster than
   `sigma` or `gamma` alone; the second SEIR term is the fast rate of that
   pair in a fully susceptible population. With `beta = 0` it reduces to
   `max(sigma, gamma)`, and with `beta = sigma = gamma` it is twice the rate.
+  In SIS, `beta + gamma` is the decay rate of a small departure from the
+  state with everyone infected; no single rate is enough. The
+  `1.25 * gamma` floor keeps `gamma * step` at most 1.6. Above about 1.62,
+  with little transmission and many infected, the RK4 increment of the
+  cumulative infections turns negative, so the count would step backwards.
   The step compared with the limit is the step actually taken: a duration
   shorter than the timestep is integrated in one step of that duration.
 
@@ -132,7 +138,11 @@ compartment, so it is neither sign-checked nor summed into `N(t)`.
   random configurations per model, compared with runs at 1/64 of the step,
   no accepted run moved a compartment in the wrong direction or missed the
   final incidence by more than 0.1 (226,590 accepted SIR runs and 107,633
-  accepted SEIR runs). With a limit at the stability boundary of 2.785 such
+  accepted SEIR runs). For SIS the same draws give 108,560 accepted runs,
+  none of which moved the infected away from or across their equilibrium,
+  let the cumulative infections fall, or missed the fine run's incidence or
+  final infected fraction by more than 0.1. With `beta + gamma` alone,
+  113,098 runs are accepted and 374 are flagged. With a limit at the stability boundary of 2.785 such
   runs do occur, from a product of about 2.2. This is evidence, not a proof
   that every accepted run is qualitatively right. The measurement is kept
   as an ignored test; repeat it with
