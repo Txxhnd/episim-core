@@ -107,12 +107,12 @@ case data.
 | Metric | Definition |
 |---|---|
 | `basic_reproduction_number` | `R0 = beta / gamma`, for both models. The theoretical number of secondary infections from one case in a fully susceptible population. |
-| `herd_immunity_threshold` | `1 - 1/R0`, or 0 when `R0 <= 1`: the fraction of the population that must be immune for the infected to decline. |
+| `herd_immunity_threshold` | `1 - 1/R0`, or 0 when `R0 <= 1`: the fraction of the population that must be immune for the infected to decline. An `Option`, `Some` for SIR and SEIR. |
 | `peak_infectious` | The largest `I` among the recorded observations. |
-| `peak_infectious_time_days` | The time of the earliest recorded observation at that peak. If `I` never rises above its initial value, this is day zero. |
+| `peak_infectious_time_days` | The time of the earliest recorded observation within `64 * f64::EPSILON * max(N0, 1)` individuals of that peak. If `I` never rises above its initial value by more than that, this is day zero. The tolerance matters only where `I` levels off at its peak; there roundoff alone would decide which observation is largest. |
 | `cumulative_infections_since_start` | `C(T)`, where `T` is the final simulation time; in SIR and SEIR this is `S(0) - S(T)`. Infections already present at day zero are not counted. |
 | `cumulative_incidence_fraction` | `C(T) / N(0)`: new infections per head of the initial population. In SIR and SEIR it is also the fraction of people newly infected. |
-| `final_size_fraction` | `(S(0) - S(inf)) / N(0)`: the fraction newly infected by the time the epidemic is over, from the final size equation below. |
+| `final_size_fraction` | `(S(0) - S(inf)) / N(0)`: the fraction newly infected by the time the epidemic is over, from the final size equation below. An `Option`, `Some` for SIR and SEIR. |
 
 The cumulative metrics refer to the final time `T` only. For any earlier
 time `t`, read `cumulative_infections` from the observation at `t`. As `T` grows,

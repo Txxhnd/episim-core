@@ -858,16 +858,21 @@ The trajectory must contain:
 ## 10.5 Epidemiological Metrics
 
 ```rust
+#[non_exhaustive]
 pub struct EpidemicMetrics {
     pub basic_reproduction_number: f64,
-    pub herd_immunity_threshold: f64,
+    pub herd_immunity_threshold: Option<f64>,
     pub peak_infectious: f64,
     pub peak_infectious_time_days: f64,
     pub cumulative_infections_since_start: f64,
     pub cumulative_incidence_fraction: f64,
-    pub final_size_fraction: f64,
+    pub final_size_fraction: Option<f64>,
 }
 ```
+
+A metric that only some models define is an `Option`, `None` for the models
+where it does not apply. `#[non_exhaustive]` lets later versions add metrics
+without a breaking change.
 
 Metric definitions:
 
@@ -891,9 +896,9 @@ This is calculated from recorded observations.
 
 ### Peak infectious time
 
-The earliest recorded time corresponding to the maximum infectious population.
+The earliest recorded time at which the infectious population is within \(64\,\varepsilon\max(N_0, 1)\) of its recorded maximum, where \(\varepsilon\) is `f64::EPSILON`.
 
-If multiple observations have the same maximum value, the earliest occurrence is selected.
+The tolerance matters where the infectious population levels off at its maximum: there roundoff alone would decide which observation is largest. Ties go to the earliest observation.
 
 ### Cumulative infections since simulation start
 

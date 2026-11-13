@@ -96,6 +96,10 @@ match simulate_sir(parameters, initial_state, settings) {
 This is a 0.1 release. The public API may still change before 1.0.
 `SimulationError` is marked `#[non_exhaustive]`: it may gain variants, so
 the compiler requires a wildcard arm when you match on it.
+`EpidemicMetrics` is `#[non_exhaustive]` too: it may gain fields, so code
+outside the crate reads its fields but cannot build one with a struct
+literal. Metrics that only some models define, such as
+`herd_immunity_threshold` and `final_size_fraction`, are `Option<f64>`.
 
 Not part of the API in this version: estimation of `Rt` from case data,
 serialization, and user-defined models.

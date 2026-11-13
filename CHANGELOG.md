@@ -25,7 +25,9 @@ The first version. It has not been published yet.
   half the step.
 - Model-derived threshold quantities: `effective_reproduction_number` on
   `SirParameters` and `SeirParameters` (`R0 * S / N` in any state), and the
-  `herd_immunity_threshold` and `final_size_fraction` metrics.
+  `herd_immunity_threshold` and `final_size_fraction` metrics. Both are
+  `Option<f64>`, because models with waning immunity will not report them.
+  `EpidemicMetrics` is `#[non_exhaustive]`.
 - `Observation::cumulative_infections`: new infections since day zero,
   integrated with the compartments as `dC/dt = beta * S * I / N`.
   `cumulative_infections_since_start` is its value at the final time.
