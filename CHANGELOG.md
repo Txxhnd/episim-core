@@ -4,10 +4,10 @@ All notable changes to this project are recorded in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.1] - unreleased
+## [0.2.0] - unreleased
 
-A patch release, compatible with 0.1.0: fixes, documentation and additions
-only, with no public item changed or removed.
+The next minor release. Under Cargo's rules for 0.x versions it may change
+the public API; every breaking change is listed here.
 
 ## [0.1.0] - 2026-11-13
 

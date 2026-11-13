@@ -724,4 +724,4 @@ After the MVP baseline, the following were added through improvement plans 001 t
 
 The last three rows came from build plans 008 to 012, after the owner accepted the design's eight recommendations on November 13, 2026. All of these are in v0.1.0.
 
-**Next: v0.1.1.** In Cargo's version rules 0.1.1 must be compatible with 0.1.0. It can fix bugs, improve documentation and examples, and add items, but it must not change or remove public items. Time-varying transmission changes the solver interface, so it belongs in 0.2.0, not 0.1.1.
+**Next: v0.2.0.** In Cargo's version rules 0.2.0 is not compatible with 0.1.0, so it may change the public API. That makes it the release for changes 0.1.x cannot take, such as time-varying transmission, which changes the solver interface. Its scope has not been decided yet.

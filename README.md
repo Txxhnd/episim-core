@@ -136,7 +136,7 @@ is not the clinical incubation period.
 
 ## Scope and limitations
 
-The 0.1 series contains the SIR, SEIR, SIS, SIRS and SEIRS models and one
+The library contains the SIR, SEIR, SIS, SIRS and SEIRS models and one
 solver. It has no command-line interface, serialization, stochastic or agent-based models, age
 structure, interventions, time-varying parameters, parameter fitting, or
 estimation of `Rt` from case data.
