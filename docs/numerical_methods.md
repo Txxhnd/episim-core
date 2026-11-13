@@ -120,6 +120,7 @@ compartment, so it is neither sign-checked nor summed into `N(t)`.
   | SIR | `max(beta, gamma)` |
   | SEIR | `max(beta, (sigma + gamma) / 2 + sqrt(((sigma - gamma) / 2)^2 + sigma * beta))` |
   | SIS | `max(beta + gamma, 1.25 * gamma)` |
+  | SIRS | `max(beta + gamma, omega)` |
 
   Susceptibles empty at up to `beta` per day. In SEIR the exposed and
   infected compartments feed each other, so together they decay faster than
@@ -131,6 +132,8 @@ compartment, so it is neither sign-checked nor summed into `N(t)`.
   `1.25 * gamma` floor keeps `gamma * step` at most 1.6. Above about 1.62,
   with little transmission and many infected, the RK4 increment of the
   cumulative infections turns negative, so the count would step backwards.
+  In SIRS, recovered individuals also leave `R` at `omega`; the largest
+  single rate, `max(beta, gamma, omega)`, is not enough.
   The step compared with the limit is the step actually taken: a duration
   shorter than the timestep is integrated in one step of that duration.
 
@@ -142,7 +145,14 @@ compartment, so it is neither sign-checked nor summed into `N(t)`.
   none of which moved the infected away from or across their equilibrium,
   let the cumulative infections fall, or missed the fine run's incidence or
   final infected fraction by more than 0.1. With `beta + gamma` alone,
-  113,098 runs are accepted and 374 are flagged. With a limit at the stability boundary of 2.785 such
+  113,098 runs are accepted and 374 are flagged. For SIRS, with `omega`
+  from a second generator, 106,450 runs are accepted and none moved a
+  compartment or the cumulative infections against the exact flow over a
+  step, or missed any final value by more than 0.1 N; with
+  `max(beta, gamma, omega)`, 212,468 are accepted and 2,410 flagged. Another
+  1,215 SIRS runs within the limit end with `NegativeCompartment` (1,210 in
+  `recovered`, 5 in `susceptible`), against 15 for SIR. Those runs fail
+  loudly, and their step is inaccurate anyway. With a limit at the stability boundary of 2.785 such
   runs do occur, from a product of about 2.2. This is evidence, not a proof
   that every accepted run is qualitatively right. The measurement is kept
   as an ignored test; repeat it with

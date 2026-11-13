@@ -8,7 +8,7 @@ calculation.
 ## Data flow
 
 ```text
-simulate_sir / _seir / _sis          src/models/
+simulate_sir / _seir / _sis / _sirs  src/models/
   1. validate parameters              src/validation.rs
   2. validate the initial state and
      compute the fixed population N
@@ -31,7 +31,7 @@ simulate_sir / _seir / _sis          src/models/
 | `error.rs` | type is public | `SimulationError` and its `Display` text. |
 | `settings.rs` | type is public | `SimulationSettings`: validated duration, step, and step limit. |
 | `validation.rs` | private | Range checks for rates and for the initial population. |
-| `models/sir.rs`, `models/seir.rs`, `models/sis.rs` | types and functions are public | Parameter and state types, the model equations, and the public `simulate_*` functions. |
+| `models/sir.rs`, `models/seir.rs`, `models/sis.rs`, `models/sirs.rs` | types and functions are public | Parameter and state types, the model equations, and the public `simulate_*` functions. |
 | `solver/rk4.rs` | private | One RK4 step over a fixed-size array, with finiteness checks. |
 | `simulation/driver.rs` | private | Step counting, time handling, trajectory storage, and per-state checks. |
 | `metrics.rs` | type is public | `EpidemicMetrics` and its calculation from a trajectory. |
@@ -79,7 +79,7 @@ None of them appears in the public API.
 |---|---|
 | Unit tests in `src/` | Internal code that integration tests cannot reach: validators, `rk4_step`, the driver, and metric calculation. |
 | `tests/validation_tests.rs` | `SimulationSettings` construction. |
-| `tests/sir_tests.rs`, `tests/seir_tests.rs`, `tests/sis_tests.rs` | The public functions, including closed-form reference cases. |
+| `tests/sir_tests.rs`, `tests/seir_tests.rs`, `tests/sis_tests.rs`, `tests/sirs_tests.rs` | The public functions, including closed-form reference cases. |
 | `tests/numerical_tests.rs` | Population drift and finite metrics across reference scenarios. |
 | `tests/convergence_tests.rs` | Error reduction under timestep refinement. |
 | Doctests | The examples in the API docs, `README.md`, and `docs/api_design.md`. |

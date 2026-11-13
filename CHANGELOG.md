@@ -16,6 +16,9 @@ The first version. It has not been published yet.
 - `simulate_sis` and `estimate_sis_step_error`: the SIS model, in which
   recovery gives no immunity. Its `EpidemicMetrics` report
   `endemic_prevalence` instead of a herd-immunity threshold and final size.
+- `simulate_sirs` and `estimate_sirs_step_error`: SIR with immunity that
+  wanes at rate `omega_per_day`, using `SirState`. It reports
+  `endemic_prevalence` and a herd-immunity threshold, and no final size.
 - A fixed-step classical fourth-order Runge-Kutta solver shared by all
   models. The final step is shortened so a run ends exactly at the requested
   duration.

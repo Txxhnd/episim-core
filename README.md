@@ -1,7 +1,7 @@
 # episim-core
 
 A small Rust library for deterministic epidemiological simulation. It
-integrates the SIR, SEIR and SIS compartmental models with a fixed-step classical
+integrates the SIR, SEIR, SIS and SIRS compartmental models with a fixed-step classical
 fourth-order Runge-Kutta (RK4) solver and returns the full trajectory, a few
 model-derived metrics, and numerical diagnostics.
 
@@ -62,9 +62,11 @@ fn main() -> Result<(), SimulationError> {
 
 SEIR works the same way through `simulate_seir`, `SeirParameters`, and
 `SeirState`, and SIS through `simulate_sis`, `SisParameters`, and
-`SisState`. In SIS recovery gives no immunity, so instead of a final size
-the metrics report `endemic_prevalence`, the fraction infected once the
-infection settles. Two runnable examples print a fuller summary:
+`SisState`, and SIRS through `simulate_sirs`, `SirsParameters` (with the
+rate `omega_per_day` at which immunity wanes), and `SirState`. In SIS
+recovery gives no immunity and in SIRS immunity wanes, so instead of a final
+size their metrics report `endemic_prevalence`, the fraction infected once
+the infection settles. Two runnable examples print a fuller summary:
 
 ```sh
 cargo run --example basic_sir
@@ -121,7 +123,8 @@ All models assume:
 1. A closed population: no births, deaths, or migration.
 2. Homogeneous mixing.
 3. Parameters that stay constant for the whole simulation.
-4. Permanent immunity after recovery in SIR and SEIR, and none in SIS.
+4. Permanent immunity after recovery in SIR and SEIR, immunity that wanes
+   in SIRS, and none in SIS.
 5. Transmission only from the infected compartment.
 6. Deterministic dynamics, with fractional "expected" population counts.
 
@@ -132,7 +135,7 @@ is not the clinical incubation period.
 
 ## Scope and limitations
 
-Version 0.1.0 contains the SIR, SEIR and SIS models and one solver. It has no
+Version 0.1.0 contains the SIR, SEIR, SIS and SIRS models and one solver. It has no
 command-line interface, serialization, stochastic or agent-based models, age
 structure, interventions, time-varying parameters, parameter fitting, or
 estimation of `Rt` from case data.
