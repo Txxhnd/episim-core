@@ -9,9 +9,11 @@ calculation.
 
 ```text
 simulate_sir / _seir / _sis / _sirs / _seirs   src/models/
+  -> simulate (shared pipeline)       src/models/mod.rs
   1. validate parameters              src/validation.rs
   2. validate the initial state and
      compute the fixed population N
+     apply the stability limit and check R0
   3. run_simulation                   src/simulation/driver.rs
        - count steps, enforce the step limit
        - reserve the trajectory
@@ -31,7 +33,8 @@ simulate_sir / _seir / _sis / _sirs / _seirs   src/models/
 | `error.rs` | type is public | `SimulationError` and its `Display` text. |
 | `settings.rs` | type is public | `SimulationSettings`: validated duration, step, and step limit. |
 | `validation.rs` | private | Range checks for rates and for the initial population. |
-| `models/sir.rs`, `models/seir.rs`, `models/sis.rs`, `models/sirs.rs`, `models/seirs.rs` | types and functions are public | Parameter and state types, the model equations, and the public `simulate_*` functions. |
+| `models/mod.rs` | private | The private `Model` trait and the shared `simulate` and `estimate` pipeline. |
+| `models/sir.rs`, `models/seir.rs`, `models/sis.rs`, `models/sirs.rs`, `models/seirs.rs` | types and functions are public | Parameter and state types, each model's `Model` implementation (equations, stability rate, model-specific metrics), and the public `simulate_*` and `estimate_*_step_error` functions, which call the shared pipeline. |
 | `solver/rk4.rs` | private | One RK4 step over a fixed-size array, with finiteness checks. |
 | `simulation/driver.rs` | private | Step counting, time handling, trajectory storage, and per-state checks. |
 | `metrics.rs` | type is public | `EpidemicMetrics` and its calculation from a trajectory. |
@@ -53,8 +56,8 @@ crate root, so users never name a module path.
   applies the negativity and conservation checks, and collects diagnostics.
   It does not compute epidemiological metrics.
 - **Metrics are computed afterwards** from the recorded trajectory, through
-  accessor functions that pick the susceptible and infectious values out of
-  a state.
+  an accessor that picks the infectious value out of a state, and each
+  model then fills in the metrics only it reports.
 
 The internal generics (`const N: usize` for the number of compartments, and
 closures for the derivative and conversions) are resolved at compile time.
@@ -65,6 +68,7 @@ None of them appears in the public API.
 | Decision | Reason |
 |---|---|
 | Concrete public functions, no public model trait | A few fixed models do not justify a plugin interface; internals can still be shared. |
+| A private `Model` trait behind one shared pipeline | Validation, the stability limit, the `R0` check, integration and metrics run in one place, so a change to the pipeline, such as a transmission schedule, is made once rather than in five copies. The trait is not exported. |
 | `f64` everywhere | Compartments are expected counts, not integers. |
 | Population `N` fixed from the initial state | Recomputing it each step would feed numerical drift back into the transmission term. |
 | Fixed-size arrays in the solver | No heap allocation inside a step. |
