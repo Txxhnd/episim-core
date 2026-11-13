@@ -156,11 +156,11 @@ impl Model<4> for SirsParameters {
     }
 
     fn fastest_rate(&self) -> f64 {
-        // With waning immunity the largest single rate is not enough: beta + gamma
-        // is the decay rate of a small departure from the state with everyone
-        // infected, and recovered individuals leave R at omega. Measured; see
+        // The sum of all three rates. max(beta + gamma, omega) is enough for
+        // stability but accepts steps that leave a quarter of the population
+        // wrong when omega is close to beta + gamma. Measured; see
         // `tests/stability_evidence_tests.rs`.
-        (self.beta_per_day + self.gamma_per_day).max(self.omega_per_day)
+        self.beta_per_day + self.gamma_per_day + self.omega_per_day
     }
 
     fn to_array(state: &SirState) -> [f64; 4] {

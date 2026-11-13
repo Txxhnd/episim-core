@@ -192,10 +192,11 @@ fn sirs_rejects_step_too_large_for_stable_integration() {
             settings(10.0, step),
         )
     };
-    // A fastest rate of 4 per day allows a step of at most 2 / 4 = 0.5 days:
-    // beta + gamma = 3 + 1, or omega = 4.
+    // The fastest rate is beta + gamma + omega. Each case sums to 4 per day,
+    // allowing a step of at most 2 / 4 = 0.5 days, although neither
+    // beta + gamma nor omega alone reaches 4.
     let too_large = SimulationError::TimeStepTooLarge { max_step_days: 0.5 };
-    for (beta, gamma, omega) in [(3.0, 1.0, 0.5), (0.2, 0.1, 4.0)] {
+    for (beta, gamma, omega) in [(2.5, 1.0, 0.5), (0.2, 0.1, 3.7)] {
         assert_eq!(run(beta, gamma, omega, 0.51).unwrap_err(), too_large);
         assert!(run(beta, gamma, omega, 0.5).is_ok(), "omega {omega}");
     }
@@ -259,9 +260,9 @@ fn sirs_stability_check_uses_the_step_actually_taken() {
     let result = simulate_sirs(PARAMETERS, INITIAL, settings(1.0, 7.0)).unwrap();
     assert_eq!(result.diagnostics.steps_executed, 1);
 
-    // The single step of 1 day is still too large for omega = 4 per day.
+    // The single step of 1 day is still too large for rates summing to 4 per day.
     assert_eq!(
-        simulate_sirs(parameters(0.2, 0.1, 4.0), INITIAL, settings(1.0, 7.0)).unwrap_err(),
+        simulate_sirs(parameters(0.2, 0.1, 3.7), INITIAL, settings(1.0, 7.0)).unwrap_err(),
         SimulationError::TimeStepTooLarge { max_step_days: 0.5 }
     );
 }
@@ -308,4 +309,23 @@ fn sirs_effective_reproduction_number_rejects_invalid_input() {
             .unwrap_err(),
         SimulationError::MetricOverflow
     );
+}
+
+#[test]
+fn sirs_rejects_a_step_that_leaves_a_quarter_of_the_population_wrong() {
+    // Found by the stability evidence: with these rates and most people
+    // infected, one step of a day ended 26% of the population away from a
+    // fine run (recovered fell by 93 where it should rise by 166). The old
+    // limit, max(beta + gamma, omega) = 1.87, accepted it; the sum, 3.73,
+    // does not.
+    let parameters = parameters(0.3929114889456895, 1.4664779429151176, 1.8734350589317061);
+    let initial = SirState {
+        susceptible: 46.97145797103499,
+        infected: 856.3605939210153,
+        recovered: 96.66794810794975,
+    };
+    assert!(matches!(
+        simulate_sirs(parameters, initial, settings(1.0, 1.0)),
+        Err(SimulationError::TimeStepTooLarge { .. })
+    ));
 }

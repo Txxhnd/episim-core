@@ -365,8 +365,10 @@ fn full_stability_evidence() {
         evidence.accepted_seir
     );
     assert!(evidence.accepted_sis >= 80_000, "{}", evidence.accepted_sis);
+    // The SIRS limit, beta + gamma + omega, accepts about one configuration
+    // in seven at a one-day step.
     assert!(
-        evidence.accepted_sirs >= 80_000,
+        evidence.accepted_sirs >= 30_000,
         "{}",
         evidence.accepted_sirs
     );
