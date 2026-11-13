@@ -834,7 +834,7 @@ These record where the implementation of Tasks 1 to 11 departed from the task te
 
 ## After This Plan
 
-The task text and the API contracts above are kept as written. Later changes came through improvement plans 001 to 007. The advisor wrote them in `plans/`, executor agents carried them out, and the advisor reviewed each one. `plans/` is in the working copy and is not committed. On `master` (`d907496`) these plans changed the contracts as follows:
+The task text and the API contracts above are kept as written. Later changes came through improvement plans 001 to 012. The advisor wrote them in `plans/`, executor agents carried them out, and the advisor reviewed each one. `plans/` is in the working copy and is not committed. Up to release 0.1.0 these plans changed the contracts as follows:
 
 | Plan | Change to the contracts above |
 |---|---|
@@ -845,14 +845,13 @@ The task text and the API contracts above are kept as written. Later changes cam
 | 005 | `EpidemicMetrics` gains `herd_immunity_threshold` and `final_size_fraction`. `SirParameters` and `SeirParameters` gain `effective_reproduction_number`, which is model-derived and is not `Rt`. |
 | 006 | Examples `outbreak_curve` and `r0_sweep` |
 | 007 | Design spike for SIS, SIRS and SEIRS (`design/007-waning-immunity-models.md`); no code change |
+| 008 | `Observation` gains `cumulative_infections`, integrated as `dC/dt = beta * S * I / N`. The driver treats the last array entry as that accumulator, outside the population checks, and the cumulative metrics come from it. |
+| 009 | `EpidemicMetrics` becomes `#[non_exhaustive]`; `herd_immunity_threshold` and `final_size_fraction` become `Option<f64>`; the peak time ignores roundoff at a level peak |
+| 010 | `simulate_sis`, `SisParameters`, `SisState`, `estimate_sis_step_error`, and the metric `endemic_prevalence` |
+| 011 | `simulate_sirs`, `SirsParameters` (reusing `SirState`), `estimate_sirs_step_error` |
+| 012 | `simulate_seirs`, `SeirsParameters` (reusing `SeirState`), `estimate_seirs_step_error` |
 
-The test suite grew from the 80 tests at the end of Task 13 to 110 passed and 2 ignored.
-
-Planned next, as build plans 008 to 012, accepted on November 13, 2026 and not yet carried out. Each lists its own exact contract changes:
-
-- `Observation` gains `cumulative_infections`, integrated as `dC/dt = beta * S * I / N`. The driver treats the last array entry as that accumulator, outside the population checks.
-- `EpidemicMetrics` becomes `#[non_exhaustive]`. `herd_immunity_threshold` and `final_size_fraction` become `Option<f64>`, and `endemic_prevalence` is added.
-- New public models: `simulate_sis`, `simulate_sirs` and `simulate_seirs`, with their parameter types and step-error estimates. SIRS reuses `SirState` and SEIRS reuses `SeirState`.
+The test suite grew from the 80 tests at the end of Task 13 to 144 passed and 2 ignored at release 0.1.0, tagged `v0.1.0` on November 13, 2026.
 
 ---
 

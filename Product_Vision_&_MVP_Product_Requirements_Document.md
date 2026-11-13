@@ -1,15 +1,17 @@
 # EPISIM-CORE
 ## Product Vision & MVP Product Requirements Document
 
-**Document status:** Approved; MVP implemented, not yet released  
-**Version:** 0.2  
+**Document status:** Approved; v0.1.0 released (tagged, not published to crates.io)  
+**Version:** 0.3  
 **Date:** November 11, 2026 (revised November 13, 2026)  
 **Product type:** Rust Computational Library  
 **Development target:** 5 weeks  
 **Release target:** v0.1.0  
 **Working name:** EPISIM-CORE
 
-**Revision note (0.2).** The MVP described in Part II is implemented on `master`. It has not been published. Section 13 records the evidence for each acceptance criterion, and Section 20 lists what was added after the MVP baseline and what is planned next. The requirements themselves are unchanged, except where a section says it was revised.
+**Revision note (0.3).** Release 0.1.0 is tagged `v0.1.0`. It contains the MVP described in Part II, plus the waning-immunity models (SIS, SIRS, SEIRS) added before the release. It has not been published to crates.io.
+
+**Revision note (0.2).** The MVP described in Part II is implemented on `master`. Section 13 records the evidence for each acceptance criterion, and Section 20 lists what was added after the MVP baseline and what is planned next. The requirements themselves are unchanged, except where a section says it was revised.
 
 ---
 
@@ -97,7 +99,7 @@ The following capabilities represent the broader product vision. They are not co
 
 | Development area | Potential capabilities | Status (November 13, 2026) |
 |---|---|---|
-| Compartmental models | SIR, SEIR, SIRS, SIS, SEIRS | SIR and SEIR implemented. SIS, SIRS and SEIRS designed (`design/007-waning-immunity-models.md`) and planned. |
+| Compartmental models | SIR, SEIR, SIRS, SIS, SEIRS | All five implemented in v0.1.0. SIS, SIRS and SEIRS follow `design/007-waning-immunity-models.md`. |
 | Advanced population models | Age-stratified and heterogeneous populations | Not started |
 | Transmission dynamics | Time-varying transmission parameters | Deferred until the waning-immunity models land |
 | Intervention modeling | Vaccination, isolation, and social interventions | Not started. Vaccination before day zero can be represented by moving people from S to R in the initial state. |
@@ -567,11 +569,11 @@ The v0.1.0 release is considered ready when:
 - [x] Population conservation tests pass. (drift at or below 1e-9 over whole trajectories)
 - [x] Numerical convergence tests pass. (measured error-reduction factors 13.9 to 15.8 against the target of 8)
 - [x] Invalid numerical states are handled explicitly. (typed errors; no clipping)
-- [x] Unit and integration tests pass. (110 passed, 2 ignored measurement tests, on November 13, 2026)
+- [x] Unit and integration tests pass. (144 passed, 2 ignored measurement tests, at the v0.1.0 tag)
 - [x] Documentation examples compile. (Rustdoc examples and the Markdown examples run as doctests)
 - [x] Public API documentation is complete. (`#![warn(missing_docs)]`; `cargo doc` with warnings denied in CI)
-- [x] Release benchmarks are recorded. (`docs/architecture.md`, measured November 12, 2026)
-- [x] Release packaging is verified. (`cargo package` builds and verifies 37 files)
+- [x] Release benchmarks are recorded. (`docs/architecture.md`, re-measured for v0.1.0 on November 13, 2026)
+- [x] Release packaging is verified. (`cargo package` builds and verifies 43 files)
 
 All criteria are met. Before publishing, the competitive landscape must be reviewed again (Section 16), and the owner must decide on the repository URL in the package metadata, which is deliberately left out for now.
 
@@ -601,7 +603,7 @@ All criteria are met. Before publishing, the competitive landscape must be revie
 
 The timeline may extend to six weeks if numerical validation identifies issues that require additional investigation.
 
-**Outcome (revised in 0.2).** The MVP was built on November 12, 2026, following `implementation_plan.md` (Tasks 1 to 13). Numerical review added the timestep stability guard. The v0.1.0 release itself has not been published.
+**Outcome (revised in 0.2).** The MVP was built on November 12, 2026, following `implementation_plan.md` (Tasks 1 to 13). Numerical review added the timestep stability guard. The waning-immunity models were added before release, and v0.1.0 was tagged on November 13, 2026. It has not been published to crates.io.
 
 ## 16. Research and Competitive Context
 
@@ -665,7 +667,7 @@ The following decisions define the proposed baseline for implementation.
 | Decision | Selection | Status |
 |---|---|---|
 | Product architecture | Pure Rust library | Implemented |
-| Initial models | SIR and SEIR | Implemented |
+| Initial models | SIR and SEIR; SIS, SIRS and SEIRS added before release | Implemented |
 | Numerical integration | Classical RK4 | Implemented |
 | Integration strategy | Fixed timestep, with timesteps beyond the RK4 stability limit rejected | Implemented |
 | Numerical precision | f64 | Implemented |
@@ -676,7 +678,7 @@ The following decisions define the proposed baseline for implementation.
 | Runtime dependencies | None | Implemented |
 | Serialization | Deferred | Deferred |
 | CLI and GUI | Excluded | Excluded |
-| Initial release | v0.1.0 | Ready, not published |
+| Initial release | v0.1.0 | Tagged November 13, 2026; not published to crates.io |
 | Licence | MIT, copyright holder ZQ | Implemented |
 | Minimum supported Rust version | 1.85, checked in CI | Implemented |
 
@@ -704,7 +706,7 @@ It must instead establish a trustworthy computational foundation that can suppor
 
 *Added in revision 0.2.*
 
-After the MVP baseline, the following were added through improvement plans 001 to 007. They are kept in `plans/` in the working copy, which is not committed to the repository. None of them widens the scope excluded in Section 5.2.
+After the MVP baseline, the following were added through improvement plans 001 to 012. They are kept in `plans/` in the working copy, which is not committed to the repository. None of them widens the scope excluded in Section 5.2.
 
 | Addition | Purpose |
 |---|---|
@@ -716,12 +718,10 @@ After the MVP baseline, the following were added through improvement plans 001 t
 | Teaching examples (`outbreak_curve`, `r0_sweep`) | CSV output from example programs; the library itself still exports nothing |
 | Design for SIS, SIRS and SEIRS (`design/007-waning-immunity-models.md`) | The waning-immunity models from Section 6, designed and measured before building |
 
-**Next.** On November 13, 2026 the owner accepted the design's eight recommendations. Five build plans (008 to 012) follow from them:
+| Cumulative infections on every `Observation` | Counts infections, reinfections included, for every model |
+| Non-exhaustive `EpidemicMetrics` with optional model-specific metrics | One metrics type for all models; metrics can be added without breaking users |
+| SIS, SIRS and SEIRS (`simulate_sis`, `simulate_sirs`, `simulate_seirs`) | The waning-immunity models from Section 6, with `endemic_prevalence` |
 
-1. A cumulative infection count for every model.
-2. Optional model-specific metrics in a non-exhaustive `EpidemicMetrics`.
-3. The SIS model.
-4. The SIRS model.
-5. The SEIRS model.
+The last three rows came from build plans 008 to 012, after the owner accepted the design's eight recommendations on November 13, 2026. All of these are in v0.1.0.
 
-These change the public API before the first release (a field on `Observation`, `Option` fields on `EpidemicMetrics`). That is why they should land before v0.1.0 is published, or the release should be renumbered once they do. Time-varying transmission waits until after them.
+**Next: v0.1.1.** In Cargo's version rules 0.1.1 must be compatible with 0.1.0. It can fix bugs, improve documentation and examples, and add items, but it must not change or remove public items. Time-varying transmission changes the solver interface, so it belongs in 0.2.0, not 0.1.1.

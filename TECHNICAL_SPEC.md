@@ -27,6 +27,7 @@ The first release supports:
 
 - SIR compartmental model.
 - SEIR compartmental model.
+- SIS, SIRS and SEIRS compartmental models, with waning or no immunity (Section 5.7).
 - Classical fourth-order Runge-Kutta numerical integration.
 - Fixed-step simulation, with timesteps beyond the RK4 stability limit rejected (Section 6.3).
 - An optional recording interval (Section 6.1).
@@ -1364,7 +1365,7 @@ Benchmark reports must document:
 
 No arbitrary runtime target should be introduced before collecting a baseline.
 
-The baseline was recorded on November 12, 2026 and is kept in `docs/architecture.md`. It covers an Intel Core i5-5350U, macOS 12.7.6 and rustc 1.99.1. That is roughly 70 to 110 nanoseconds per step, for example 88 ms for 1,000,000 SIR steps. Memory was not measured. The trajectory accounts for one observation per recorded step.
+The baseline was first recorded on November 12, 2026, and re-measured for release 0.1.0 on November 13, 2026. It is kept in `docs/architecture.md`. It covers an Intel Core i5-5350U, macOS 12.7.6 and rustc 1.99.1. That is roughly 80 to 95 nanoseconds per step, for example 90 ms for 1,000,000 SIR steps. Memory was not measured. The trajectory accounts for one observation per recorded step.
 
 ---
 
@@ -1565,7 +1566,7 @@ These questions were open when the specification was written. All are resolved.
 
 # 20. Definition of Technical Completion
 
-EPISIM-CORE v0.1.0 is technically complete when the following hold. As of November 13, 2026 all of them do, and the package has not been published.
+EPISIM-CORE v0.1.0 is technically complete when the following hold. As of November 13, 2026 all of them do. Release 0.1.0 is tagged `v0.1.0` and has not been published to crates.io.
 
 - Both epidemiological models are implemented.
 - Both models use the shared RK4 solver.

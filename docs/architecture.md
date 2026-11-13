@@ -94,7 +94,7 @@ run stores about 40 MB or 48 MB when every step is recorded.
 ## Performance baseline
 
 Measured with `cargo bench` (Criterion 0.7, 10 samples per case) on
-2026-11-12. These numbers are a baseline for comparison on the same machine,
+2026-11-13, for release 0.1.0. These numbers are a baseline for comparison on the same machine,
 not a performance target or guarantee.
 
 | | |
@@ -112,16 +112,19 @@ trajectory reservation, integration, and metric calculation.
 
 | Steps | Timestep (days) | Duration (days) | SIR median | SEIR median |
 |---:|---:|---:|---:|---:|
-| 10,000 | 1/64 | 156.25 | 0.69 ms | 0.87 ms |
-| 100,000 | 1/512 | 195.31 | 9.2 ms | 11.0 ms |
-| 1,000,000 | 1/8192 | 122.07 | 88 ms | 108 ms |
+| 10,000 | 1/64 | 156.25 | 0.82 ms | 0.81 ms |
+| 100,000 | 1/512 | 195.31 | 9.3 ms | 9.4 ms |
+| 1,000,000 | 1/8192 | 122.07 | 90 ms | 88 ms |
 
-That is roughly 70 to 110 nanoseconds per step. Criterion's interval for the
+That is roughly 80 to 95 nanoseconds per step. Criterion's interval for the
+1,000,000-step SIR case was 86 to 96 ms. On 2026-11-12, before observations
+carried the cumulative infections, the same workloads took 0.69, 9.2 and
+88 ms (SIR) and 0.87, 11.0 and 108 ms (SEIR). That run's interval for the
 1,000,000-step SIR case was 78 to 105 ms, so treat differences of less than
-about 20% as noise on this machine. Memory use was not measured; the
-trajectory accounted for 32 bytes (SIR) or 40 bytes (SEIR) per step. Since
-then each observation also holds the cumulative infections, 8 bytes more,
-and each step integrates one more value.
+about 20% as noise on this machine; the extra integrated value made no
+measurable difference. Memory use was not measured; the trajectory accounts
+for 40 bytes (SIR) or 48 bytes (SEIR) per recorded step. SIS, SIRS and SEIRS
+are not benchmarked.
 
 The timesteps differ between rows so that each run covers a similar span of
 an active outbreak. An earlier run that kept the timestep at 1/64 day and
