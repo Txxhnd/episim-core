@@ -45,9 +45,11 @@ pub struct EpidemicMetrics {
     /// simulated duration grows. `Some` for SIR and SEIR.
     pub final_size_fraction: Option<f64>,
     /// Fraction of the population infected once the model settles at its
-    /// endemic equilibrium, `I* / N`, or 0 when `R0 <= 1`. It follows from the
-    /// parameters alone, like `basic_reproduction_number`. `Some` for models
-    /// in which people become susceptible again: SIS, SIRS and SEIRS.
+    /// endemic equilibrium, `I* / N`, or 0 when `R0 <= 1` or when nobody is
+    /// infected (or, in SEIRS, exposed) at the start. It follows from the
+    /// parameters and that one fact about the initial state; it does not
+    /// depend on the simulated duration. `Some` for models in which people
+    /// become susceptible again: SIS, SIRS and SEIRS.
     pub endemic_prevalence: Option<f64>,
 }
 

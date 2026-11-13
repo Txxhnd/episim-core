@@ -169,8 +169,13 @@ pub fn simulate_sis(
         gamma_per_day,
         |state| state.infected,
     )?;
-    // At the endemic equilibrium S* = N / R0, so I* / N = 1 - 1/R0.
-    metrics.endemic_prevalence = Some(herd_immunity_threshold(metrics.basic_reproduction_number));
+    // At the endemic equilibrium S* = N / R0, so I* / N = 1 - 1/R0. With
+    // nobody infected at the start the infection can never take hold.
+    metrics.endemic_prevalence = Some(if initial_state.infected > 0.0 {
+        herd_immunity_threshold(metrics.basic_reproduction_number)
+    } else {
+        0.0
+    });
     Ok(SimulationResult {
         trajectory: output.trajectory,
         metrics,

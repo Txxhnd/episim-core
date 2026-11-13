@@ -186,11 +186,14 @@ pub fn simulate_seirs(
     // At the endemic equilibrium S* = N / R0, sigma * E* = gamma * I* and
     // gamma * I* = omega * R*, so the N (1 - 1/R0) not susceptible split as
     // E* : I* : R* = gamma/sigma : 1 : gamma/omega. Written with omega in the
-    // numerator, so that omega = 0 gives 0 without dividing by zero.
-    metrics.endemic_prevalence = Some(
+    // numerator, so that omega = 0 gives 0 without dividing by zero. With
+    // nobody exposed or infected at the start the infection can never take hold.
+    metrics.endemic_prevalence = Some(if initial_state.exposed + initial_state.infected > 0.0 {
         herd_immunity_threshold(r0) * omega_per_day
-            / (omega_per_day + gamma_per_day + gamma_per_day * omega_per_day / sigma_per_day),
-    );
+            / (omega_per_day + gamma_per_day + gamma_per_day * omega_per_day / sigma_per_day)
+    } else {
+        0.0
+    });
     Ok(SimulationResult {
         trajectory: output.trajectory,
         metrics,

@@ -247,3 +247,22 @@ fn seirs_step_error_estimate_matches_the_error_against_a_fine_reference() {
     let halving = estimated / estimate(0.5).max_absolute_error;
     assert!((12.0..20.0).contains(&halving), "{halving}");
 }
+
+#[test]
+fn seirs_without_initial_infection_never_becomes_endemic() {
+    // R0 = 5, but with nobody exposed or infected the infection can never
+    // start, and the endemic prevalence is 0.
+    let initial = SeirState {
+        susceptible: 900.0,
+        exposed: 0.0,
+        infected: 0.0,
+        recovered: 100.0,
+    };
+    let result = simulate_seirs(PARAMETERS, initial, settings(400.0, 0.25)).unwrap();
+    for observation in &result.trajectory {
+        assert_eq!(observation.state.exposed, 0.0);
+        assert_eq!(observation.state.infected, 0.0);
+        assert_eq!(observation.cumulative_infections, 0.0);
+    }
+    assert_eq!(result.metrics.endemic_prevalence, Some(0.0));
+}

@@ -278,3 +278,19 @@ fn sis_step_error_estimate_matches_the_error_against_the_closed_form() {
     let halving = coarse.max_absolute_error / estimate(0.5).max_absolute_error;
     assert!((12.0..20.0).contains(&halving), "{halving}");
 }
+
+#[test]
+fn sis_without_initial_infection_never_becomes_endemic() {
+    // R0 = 3, but with nobody infected the infection can never start, so
+    // the run stays where it began and the endemic prevalence is 0.
+    let initial = SisState {
+        susceptible: 1000.0,
+        infected: 0.0,
+    };
+    let result = simulate_sis(PARAMETERS, initial, settings(400.0, 0.25)).unwrap();
+    for observation in &result.trajectory {
+        assert_eq!(observation.state, initial);
+        assert_eq!(observation.cumulative_infections, 0.0);
+    }
+    assert_eq!(result.metrics.endemic_prevalence, Some(0.0));
+}

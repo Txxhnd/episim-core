@@ -171,9 +171,13 @@ pub fn simulate_sirs(
     // At the endemic equilibrium S* = N / R0, and gamma * I* = omega * R*
     // with R* = N - S* - I*, which gives
     // I* / N = (1 - 1/R0) * omega / (omega + gamma). Without waning
-    // (omega = 0) the infection still dies out, so the prevalence is 0.
-    metrics.endemic_prevalence =
-        Some(herd_immunity_threshold(r0) * omega_per_day / (omega_per_day + gamma_per_day));
+    // (omega = 0) the infection still dies out, so the prevalence is 0, and
+    // with nobody infected at the start it can never take hold.
+    metrics.endemic_prevalence = Some(if initial_state.infected > 0.0 {
+        herd_immunity_threshold(r0) * omega_per_day / (omega_per_day + gamma_per_day)
+    } else {
+        0.0
+    });
     Ok(SimulationResult {
         trajectory: output.trajectory,
         metrics,
