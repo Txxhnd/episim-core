@@ -1,6 +1,6 @@
 # Design 007: SIS, SIRS and SEIRS (waning immunity)
 
-Spike for plan 007, on branch `spike/007-waning-immunity` from `9468df0`.
+Spike for plan 007, on branch `spike/007-waning-immunity` from `1a2e638` (rewritten ID; originally `9468df0`).
 The prototype on this branch is not for merging. Only this document, or a
 build plan written from it, moves on. Plan 005 (threshold metrics) had not
 landed at the starting commit. Q3 therefore says how its metrics would apply

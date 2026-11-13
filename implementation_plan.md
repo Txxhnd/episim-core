@@ -834,7 +834,7 @@ These record where the implementation of Tasks 1 to 11 departed from the task te
 
 ## After This Plan
 
-The task text and the API contracts above are kept as written. Later changes came through improvement plans 001 to 007. The advisor wrote them in `plans/`, executor agents carried them out, and the advisor reviewed each one. `plans/` is in the working copy and is not committed. On `master` (`aa5d7fb`) these plans changed the contracts as follows:
+The task text and the API contracts above are kept as written. Later changes came through improvement plans 001 to 007. The advisor wrote them in `plans/`, executor agents carried them out, and the advisor reviewed each one. `plans/` is in the working copy and is not committed. On `master` (`d907496`) these plans changed the contracts as follows:
 
 | Plan | Change to the contracts above |
 |---|---|
