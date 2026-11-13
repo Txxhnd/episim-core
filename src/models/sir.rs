@@ -1,12 +1,12 @@
-use crate::accuracy::{StepErrorEstimate, estimate_step_error};
+use crate::accuracy::StepErrorEstimate;
 use crate::error::SimulationError;
 use crate::metrics::{
-    basic_reproduction_number, calculate_metrics, effective_reproduction_number,
-    final_size_fraction, herd_immunity_threshold,
+    EpidemicMetrics, basic_reproduction_number, effective_reproduction_number, final_size_fraction,
+    herd_immunity_threshold,
 };
+use crate::models::{Model, estimate, simulate};
 use crate::result::SimulationResult;
 use crate::settings::SimulationSettings;
-use crate::simulation::driver::run_simulation;
 use crate::validation;
 
 /// Rate parameters of the SIR model, constant for the whole simulation.
@@ -146,69 +146,7 @@ pub fn simulate_sir(
     initial_state: SirState,
     settings: SimulationSettings,
 ) -> Result<SimulationResult<SirState>, SimulationError> {
-    parameters.validate()?;
-    let population = initial_state.initial_population()?;
-    let SirParameters {
-        beta_per_day,
-        gamma_per_day,
-    } = parameters;
-    // Susceptibles empty at up to beta per day and infected at gamma per
-    // day; no state of the model decays faster than the larger of the two.
-    // A duration shorter than the step is integrated in one shorter step.
-    validation::stable_step(
-        settings.step_days().min(settings.duration_days()),
-        beta_per_day.max(gamma_per_day),
-    )?;
-    // Checked now so that an unusable R0 is reported before any integration.
-    basic_reproduction_number(beta_per_day, gamma_per_day)?;
-
-    let output = run_simulation(
-        [
-            initial_state.susceptible,
-            initial_state.infected,
-            initial_state.recovered,
-            0.0,
-        ],
-        population,
-        settings,
-        |[susceptible, infected, _, _]| {
-            // Dividing first avoids multiplying two large population values.
-            let infection_flow = beta_per_day * (susceptible / population) * infected;
-            let recovery_flow = gamma_per_day * infected;
-            [
-                -infection_flow,
-                infection_flow - recovery_flow,
-                recovery_flow,
-                infection_flow,
-            ]
-        },
-        |[susceptible, infected, recovered, _]| SirState {
-            susceptible,
-            infected,
-            recovered,
-        },
-        &["susceptible", "infected", "recovered"],
-    )?;
-    let mut metrics = calculate_metrics(
-        &output.trajectory,
-        population,
-        beta_per_day,
-        gamma_per_day,
-        |state| state.infected,
-    )?;
-    let r0 = metrics.basic_reproduction_number;
-    metrics.herd_immunity_threshold = Some(herd_immunity_threshold(r0));
-    metrics.final_size_fraction = Some(final_size_fraction(
-        initial_state.susceptible,
-        initial_state.infected,
-        population,
-        r0,
-    ));
-    Ok(SimulationResult {
-        trajectory: output.trajectory,
-        metrics,
-        diagnostics: output.diagnostics,
-    })
+    simulate(&parameters, initial_state, settings)
 }
 
 /// Estimates the error that the timestep introduces into [`simulate_sir`] for
@@ -249,14 +187,73 @@ pub fn estimate_sir_step_error(
     initial_state: SirState,
     settings: SimulationSettings,
 ) -> Result<StepErrorEstimate, SimulationError> {
-    let run = simulate_sir(parameters, initial_state, settings)?;
-    let half_step_run = simulate_sir(parameters, initial_state, settings.halved())?;
-    Ok(estimate_step_error(
-        &run.trajectory,
-        &half_step_run.trajectory,
-        initial_state.initial_population()?,
-        |state| [state.susceptible, state.infected, state.recovered],
-    ))
+    estimate(&parameters, initial_state, settings)
+}
+
+impl Model<4> for SirParameters {
+    type State = SirState;
+    const COMPARTMENTS: &'static [&'static str] = &["susceptible", "infected", "recovered"];
+
+    fn validate(&self) -> Result<(), SimulationError> {
+        SirParameters::validate(self)
+    }
+
+    fn population(state: &SirState) -> Result<f64, SimulationError> {
+        state.initial_population()
+    }
+
+    fn beta(&self) -> f64 {
+        self.beta_per_day
+    }
+
+    fn gamma(&self) -> f64 {
+        self.gamma_per_day
+    }
+
+    fn fastest_rate(&self) -> f64 {
+        // Susceptibles empty at up to beta per day and infected at gamma per
+        // day; no state of the model decays faster than the larger of the two.
+        self.beta_per_day.max(self.gamma_per_day)
+    }
+
+    fn to_array(state: &SirState) -> [f64; 4] {
+        [state.susceptible, state.infected, state.recovered, 0.0]
+    }
+
+    fn from_array([susceptible, infected, recovered, _]: [f64; 4]) -> SirState {
+        SirState {
+            susceptible,
+            infected,
+            recovered,
+        }
+    }
+
+    fn derivative(&self, population: f64, [susceptible, infected, _, _]: [f64; 4]) -> [f64; 4] {
+        // Dividing first avoids multiplying two large population values.
+        let infection_flow = self.beta_per_day * (susceptible / population) * infected;
+        let recovery_flow = self.gamma_per_day * infected;
+        [
+            -infection_flow,
+            infection_flow - recovery_flow,
+            recovery_flow,
+            infection_flow,
+        ]
+    }
+
+    fn infectious(state: &SirState) -> f64 {
+        state.infected
+    }
+
+    fn model_metrics(&self, metrics: &mut EpidemicMetrics, initial: &SirState, population: f64) {
+        let r0 = metrics.basic_reproduction_number;
+        metrics.herd_immunity_threshold = Some(herd_immunity_threshold(r0));
+        metrics.final_size_fraction = Some(final_size_fraction(
+            initial.susceptible,
+            initial.infected,
+            population,
+            r0,
+        ));
+    }
 }
 
 #[cfg(test)]

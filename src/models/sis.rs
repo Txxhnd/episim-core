@@ -1,12 +1,12 @@
-use crate::accuracy::{StepErrorEstimate, estimate_step_error};
+use crate::accuracy::StepErrorEstimate;
 use crate::error::SimulationError;
 use crate::metrics::{
-    basic_reproduction_number, calculate_metrics, effective_reproduction_number,
+    EpidemicMetrics, basic_reproduction_number, effective_reproduction_number,
     herd_immunity_threshold,
 };
+use crate::models::{Model, estimate, simulate};
 use crate::result::SimulationResult;
 use crate::settings::SimulationSettings;
-use crate::simulation::driver::run_simulation;
 use crate::validation;
 
 /// Rate parameters of the SIS model, constant for the whole simulation.
@@ -124,63 +124,7 @@ pub fn simulate_sis(
     initial_state: SisState,
     settings: SimulationSettings,
 ) -> Result<SimulationResult<SisState>, SimulationError> {
-    parameters.validate()?;
-    let population = initial_state.initial_population()?;
-    let SisParameters {
-        beta_per_day,
-        gamma_per_day,
-    } = parameters;
-    // beta + gamma is the decay rate of a small departure from the state with
-    // everyone infected. The 1.25 * gamma floor keeps gamma * step at most
-    // 1.6: with little transmission and many infected, a larger step makes
-    // the RK4 increment of the cumulative infections negative. Both were
-    // measured; see `tests/stability_evidence_tests.rs`.
-    validation::stable_step(
-        settings.step_days().min(settings.duration_days()),
-        (beta_per_day + gamma_per_day).max(1.25 * gamma_per_day),
-    )?;
-    // Checked now so that an unusable R0 is reported before any integration.
-    basic_reproduction_number(beta_per_day, gamma_per_day)?;
-
-    let output = run_simulation(
-        [initial_state.susceptible, initial_state.infected, 0.0],
-        population,
-        settings,
-        |[susceptible, infected, _]| {
-            // Dividing first avoids multiplying two large population values.
-            let infection_flow = beta_per_day * (susceptible / population) * infected;
-            let recovery_flow = gamma_per_day * infected;
-            [
-                recovery_flow - infection_flow,
-                infection_flow - recovery_flow,
-                infection_flow,
-            ]
-        },
-        |[susceptible, infected, _]| SisState {
-            susceptible,
-            infected,
-        },
-        &["susceptible", "infected"],
-    )?;
-    let mut metrics = calculate_metrics(
-        &output.trajectory,
-        population,
-        beta_per_day,
-        gamma_per_day,
-        |state| state.infected,
-    )?;
-    // At the endemic equilibrium S* = N / R0, so I* / N = 1 - 1/R0. With
-    // nobody infected at the start the infection can never take hold.
-    metrics.endemic_prevalence = Some(if initial_state.infected > 0.0 {
-        herd_immunity_threshold(metrics.basic_reproduction_number)
-    } else {
-        0.0
-    });
-    Ok(SimulationResult {
-        trajectory: output.trajectory,
-        metrics,
-        diagnostics: output.diagnostics,
-    })
+    simulate(&parameters, initial_state, settings)
 }
 
 /// Estimates the error that the timestep introduces into [`simulate_sis`] for
@@ -199,12 +143,71 @@ pub fn estimate_sis_step_error(
     initial_state: SisState,
     settings: SimulationSettings,
 ) -> Result<StepErrorEstimate, SimulationError> {
-    let run = simulate_sis(parameters, initial_state, settings)?;
-    let half_step_run = simulate_sis(parameters, initial_state, settings.halved())?;
-    Ok(estimate_step_error(
-        &run.trajectory,
-        &half_step_run.trajectory,
-        initial_state.initial_population()?,
-        |state| [state.susceptible, state.infected],
-    ))
+    estimate(&parameters, initial_state, settings)
+}
+
+impl Model<3> for SisParameters {
+    type State = SisState;
+    const COMPARTMENTS: &'static [&'static str] = &["susceptible", "infected"];
+
+    fn validate(&self) -> Result<(), SimulationError> {
+        SisParameters::validate(self)
+    }
+
+    fn population(state: &SisState) -> Result<f64, SimulationError> {
+        state.initial_population()
+    }
+
+    fn beta(&self) -> f64 {
+        self.beta_per_day
+    }
+
+    fn gamma(&self) -> f64 {
+        self.gamma_per_day
+    }
+
+    fn fastest_rate(&self) -> f64 {
+        // beta + gamma is the decay rate of a small departure from the state with
+        // everyone infected. The 1.25 * gamma floor keeps gamma * step at most
+        // 1.6: with little transmission and many infected, a larger step makes
+        // the RK4 increment of the cumulative infections negative. Both were
+        // measured; see `tests/stability_evidence_tests.rs`.
+        (self.beta_per_day + self.gamma_per_day).max(1.25 * self.gamma_per_day)
+    }
+
+    fn to_array(state: &SisState) -> [f64; 3] {
+        [state.susceptible, state.infected, 0.0]
+    }
+
+    fn from_array([susceptible, infected, _]: [f64; 3]) -> SisState {
+        SisState {
+            susceptible,
+            infected,
+        }
+    }
+
+    fn derivative(&self, population: f64, [susceptible, infected, _]: [f64; 3]) -> [f64; 3] {
+        // Dividing first avoids multiplying two large population values.
+        let infection_flow = self.beta_per_day * (susceptible / population) * infected;
+        let recovery_flow = self.gamma_per_day * infected;
+        [
+            recovery_flow - infection_flow,
+            infection_flow - recovery_flow,
+            infection_flow,
+        ]
+    }
+
+    fn infectious(state: &SisState) -> f64 {
+        state.infected
+    }
+
+    fn model_metrics(&self, metrics: &mut EpidemicMetrics, initial: &SisState, _population: f64) {
+        // At the endemic equilibrium S* = N / R0, so I* / N = 1 - 1/R0. With
+        // nobody infected at the start the infection can never take hold.
+        metrics.endemic_prevalence = Some(if initial.infected > 0.0 {
+            herd_immunity_threshold(metrics.basic_reproduction_number)
+        } else {
+            0.0
+        });
+    }
 }

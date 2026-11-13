@@ -1,13 +1,13 @@
-use crate::accuracy::{StepErrorEstimate, estimate_step_error};
+use crate::accuracy::StepErrorEstimate;
 use crate::error::SimulationError;
 use crate::metrics::{
-    basic_reproduction_number, calculate_metrics, effective_reproduction_number,
+    EpidemicMetrics, basic_reproduction_number, effective_reproduction_number,
     herd_immunity_threshold,
 };
 use crate::models::seir::SeirState;
+use crate::models::{Model, estimate, simulate};
 use crate::result::SimulationResult;
 use crate::settings::SimulationSettings;
-use crate::simulation::driver::run_simulation;
 use crate::validation;
 
 /// Rate parameters of the SEIRS model, constant for the whole simulation.
@@ -124,81 +124,7 @@ pub fn simulate_seirs(
     initial_state: SeirState,
     settings: SimulationSettings,
 ) -> Result<SimulationResult<SeirState>, SimulationError> {
-    parameters.validate()?;
-    let population = initial_state.initial_population()?;
-    let SeirsParameters {
-        beta_per_day,
-        sigma_per_day,
-        gamma_per_day,
-        omega_per_day,
-    } = parameters;
-    // The sum of all four rates. Tighter formulas built from SEIR's coupled
-    // rate let through runs whose recovered compartment rises over a step
-    // where it should fall. Measured; see `tests/stability_evidence_tests.rs`.
-    validation::stable_step(
-        settings.step_days().min(settings.duration_days()),
-        beta_per_day + sigma_per_day + gamma_per_day + omega_per_day,
-    )?;
-    // Checked now so that an unusable R0 is reported before any integration.
-    basic_reproduction_number(beta_per_day, gamma_per_day)?;
-
-    let output = run_simulation(
-        [
-            initial_state.susceptible,
-            initial_state.exposed,
-            initial_state.infected,
-            initial_state.recovered,
-            0.0,
-        ],
-        population,
-        settings,
-        |[susceptible, exposed, infected, recovered, _]| {
-            // Dividing first avoids multiplying two large population values.
-            let infection_flow = beta_per_day * (susceptible / population) * infected;
-            let progression_flow = sigma_per_day * exposed;
-            let recovery_flow = gamma_per_day * infected;
-            let waning_flow = omega_per_day * recovered;
-            [
-                waning_flow - infection_flow,
-                infection_flow - progression_flow,
-                progression_flow - recovery_flow,
-                recovery_flow - waning_flow,
-                infection_flow,
-            ]
-        },
-        |[susceptible, exposed, infected, recovered, _]| SeirState {
-            susceptible,
-            exposed,
-            infected,
-            recovered,
-        },
-        &["susceptible", "exposed", "infected", "recovered"],
-    )?;
-    let mut metrics = calculate_metrics(
-        &output.trajectory,
-        population,
-        beta_per_day,
-        gamma_per_day,
-        |state| state.infected,
-    )?;
-    let r0 = metrics.basic_reproduction_number;
-    metrics.herd_immunity_threshold = Some(herd_immunity_threshold(r0));
-    // At the endemic equilibrium S* = N / R0, sigma * E* = gamma * I* and
-    // gamma * I* = omega * R*, so the N (1 - 1/R0) not susceptible split as
-    // E* : I* : R* = gamma/sigma : 1 : gamma/omega. Written with omega in the
-    // numerator, so that omega = 0 gives 0 without dividing by zero. With
-    // nobody exposed or infected at the start the infection can never take hold.
-    metrics.endemic_prevalence = Some(if initial_state.exposed + initial_state.infected > 0.0 {
-        herd_immunity_threshold(r0) * omega_per_day
-            / (omega_per_day + gamma_per_day + gamma_per_day * omega_per_day / sigma_per_day)
-    } else {
-        0.0
-    });
-    Ok(SimulationResult {
-        trajectory: output.trajectory,
-        metrics,
-        diagnostics: output.diagnostics,
-    })
+    simulate(&parameters, initial_state, settings)
 }
 
 /// Estimates the error that the timestep introduces into [`simulate_seirs`]
@@ -217,19 +143,94 @@ pub fn estimate_seirs_step_error(
     initial_state: SeirState,
     settings: SimulationSettings,
 ) -> Result<StepErrorEstimate, SimulationError> {
-    let run = simulate_seirs(parameters, initial_state, settings)?;
-    let half_step_run = simulate_seirs(parameters, initial_state, settings.halved())?;
-    Ok(estimate_step_error(
-        &run.trajectory,
-        &half_step_run.trajectory,
-        initial_state.initial_population()?,
-        |state| {
-            [
-                state.susceptible,
-                state.exposed,
-                state.infected,
-                state.recovered,
-            ]
-        },
-    ))
+    estimate(&parameters, initial_state, settings)
+}
+
+impl Model<5> for SeirsParameters {
+    type State = SeirState;
+    const COMPARTMENTS: &'static [&'static str] =
+        &["susceptible", "exposed", "infected", "recovered"];
+
+    fn validate(&self) -> Result<(), SimulationError> {
+        SeirsParameters::validate(self)
+    }
+
+    fn population(state: &SeirState) -> Result<f64, SimulationError> {
+        state.initial_population()
+    }
+
+    fn beta(&self) -> f64 {
+        self.beta_per_day
+    }
+
+    fn gamma(&self) -> f64 {
+        self.gamma_per_day
+    }
+
+    fn fastest_rate(&self) -> f64 {
+        // The sum of all four rates. Tighter formulas built from SEIR's coupled
+        // rate let through runs whose recovered compartment rises over a step
+        // where it should fall. Measured; see `tests/stability_evidence_tests.rs`.
+        self.beta_per_day + self.sigma_per_day + self.gamma_per_day + self.omega_per_day
+    }
+
+    fn to_array(state: &SeirState) -> [f64; 5] {
+        [
+            state.susceptible,
+            state.exposed,
+            state.infected,
+            state.recovered,
+            0.0,
+        ]
+    }
+
+    fn from_array([susceptible, exposed, infected, recovered, _]: [f64; 5]) -> SeirState {
+        SeirState {
+            susceptible,
+            exposed,
+            infected,
+            recovered,
+        }
+    }
+
+    fn derivative(
+        &self,
+        population: f64,
+        [susceptible, exposed, infected, recovered, _]: [f64; 5],
+    ) -> [f64; 5] {
+        // Dividing first avoids multiplying two large population values.
+        let infection_flow = self.beta_per_day * (susceptible / population) * infected;
+        let progression_flow = self.sigma_per_day * exposed;
+        let recovery_flow = self.gamma_per_day * infected;
+        let waning_flow = self.omega_per_day * recovered;
+        [
+            waning_flow - infection_flow,
+            infection_flow - progression_flow,
+            progression_flow - recovery_flow,
+            recovery_flow - waning_flow,
+            infection_flow,
+        ]
+    }
+
+    fn infectious(state: &SeirState) -> f64 {
+        state.infected
+    }
+
+    fn model_metrics(&self, metrics: &mut EpidemicMetrics, initial: &SeirState, _population: f64) {
+        let (sigma_per_day, gamma_per_day, omega_per_day) =
+            (self.sigma_per_day, self.gamma_per_day, self.omega_per_day);
+        let r0 = metrics.basic_reproduction_number;
+        metrics.herd_immunity_threshold = Some(herd_immunity_threshold(r0));
+        // At the endemic equilibrium S* = N / R0, sigma * E* = gamma * I* and
+        // gamma * I* = omega * R*, so the N (1 - 1/R0) not susceptible split as
+        // E* : I* : R* = gamma/sigma : 1 : gamma/omega. Written with omega in the
+        // numerator, so that omega = 0 gives 0 without dividing by zero. With
+        // nobody exposed or infected at the start the infection can never take hold.
+        metrics.endemic_prevalence = Some(if initial.exposed + initial.infected > 0.0 {
+            herd_immunity_threshold(r0) * omega_per_day
+                / (omega_per_day + gamma_per_day + gamma_per_day * omega_per_day / sigma_per_day)
+        } else {
+            0.0
+        });
+    }
 }

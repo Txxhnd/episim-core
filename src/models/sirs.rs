@@ -1,13 +1,13 @@
-use crate::accuracy::{StepErrorEstimate, estimate_step_error};
+use crate::accuracy::StepErrorEstimate;
 use crate::error::SimulationError;
 use crate::metrics::{
-    basic_reproduction_number, calculate_metrics, effective_reproduction_number,
+    EpidemicMetrics, basic_reproduction_number, effective_reproduction_number,
     herd_immunity_threshold,
 };
 use crate::models::sir::SirState;
+use crate::models::{Model, estimate, simulate};
 use crate::result::SimulationResult;
 use crate::settings::SimulationSettings;
-use crate::simulation::driver::run_simulation;
 use crate::validation;
 
 /// Rate parameters of the SIRS model, constant for the whole simulation.
@@ -113,76 +113,7 @@ pub fn simulate_sirs(
     initial_state: SirState,
     settings: SimulationSettings,
 ) -> Result<SimulationResult<SirState>, SimulationError> {
-    parameters.validate()?;
-    let population = initial_state.initial_population()?;
-    let SirsParameters {
-        beta_per_day,
-        gamma_per_day,
-        omega_per_day,
-    } = parameters;
-    // With waning immunity the largest single rate is not enough: beta + gamma
-    // is the decay rate of a small departure from the state with everyone
-    // infected, and recovered individuals leave R at omega. Measured; see
-    // `tests/stability_evidence_tests.rs`.
-    validation::stable_step(
-        settings.step_days().min(settings.duration_days()),
-        (beta_per_day + gamma_per_day).max(omega_per_day),
-    )?;
-    // Checked now so that an unusable R0 is reported before any integration.
-    basic_reproduction_number(beta_per_day, gamma_per_day)?;
-
-    let output = run_simulation(
-        [
-            initial_state.susceptible,
-            initial_state.infected,
-            initial_state.recovered,
-            0.0,
-        ],
-        population,
-        settings,
-        |[susceptible, infected, recovered, _]| {
-            // Dividing first avoids multiplying two large population values.
-            let infection_flow = beta_per_day * (susceptible / population) * infected;
-            let recovery_flow = gamma_per_day * infected;
-            let waning_flow = omega_per_day * recovered;
-            [
-                waning_flow - infection_flow,
-                infection_flow - recovery_flow,
-                recovery_flow - waning_flow,
-                infection_flow,
-            ]
-        },
-        |[susceptible, infected, recovered, _]| SirState {
-            susceptible,
-            infected,
-            recovered,
-        },
-        &["susceptible", "infected", "recovered"],
-    )?;
-    let mut metrics = calculate_metrics(
-        &output.trajectory,
-        population,
-        beta_per_day,
-        gamma_per_day,
-        |state| state.infected,
-    )?;
-    let r0 = metrics.basic_reproduction_number;
-    metrics.herd_immunity_threshold = Some(herd_immunity_threshold(r0));
-    // At the endemic equilibrium S* = N / R0, and gamma * I* = omega * R*
-    // with R* = N - S* - I*, which gives
-    // I* / N = (1 - 1/R0) * omega / (omega + gamma). Without waning
-    // (omega = 0) the infection still dies out, so the prevalence is 0, and
-    // with nobody infected at the start it can never take hold.
-    metrics.endemic_prevalence = Some(if initial_state.infected > 0.0 {
-        herd_immunity_threshold(r0) * omega_per_day / (omega_per_day + gamma_per_day)
-    } else {
-        0.0
-    });
-    Ok(SimulationResult {
-        trajectory: output.trajectory,
-        metrics,
-        diagnostics: output.diagnostics,
-    })
+    simulate(&parameters, initial_state, settings)
 }
 
 /// Estimates the error that the timestep introduces into [`simulate_sirs`]
@@ -201,12 +132,83 @@ pub fn estimate_sirs_step_error(
     initial_state: SirState,
     settings: SimulationSettings,
 ) -> Result<StepErrorEstimate, SimulationError> {
-    let run = simulate_sirs(parameters, initial_state, settings)?;
-    let half_step_run = simulate_sirs(parameters, initial_state, settings.halved())?;
-    Ok(estimate_step_error(
-        &run.trajectory,
-        &half_step_run.trajectory,
-        initial_state.initial_population()?,
-        |state| [state.susceptible, state.infected, state.recovered],
-    ))
+    estimate(&parameters, initial_state, settings)
+}
+
+impl Model<4> for SirsParameters {
+    type State = SirState;
+    const COMPARTMENTS: &'static [&'static str] = &["susceptible", "infected", "recovered"];
+
+    fn validate(&self) -> Result<(), SimulationError> {
+        SirsParameters::validate(self)
+    }
+
+    fn population(state: &SirState) -> Result<f64, SimulationError> {
+        state.initial_population()
+    }
+
+    fn beta(&self) -> f64 {
+        self.beta_per_day
+    }
+
+    fn gamma(&self) -> f64 {
+        self.gamma_per_day
+    }
+
+    fn fastest_rate(&self) -> f64 {
+        // With waning immunity the largest single rate is not enough: beta + gamma
+        // is the decay rate of a small departure from the state with everyone
+        // infected, and recovered individuals leave R at omega. Measured; see
+        // `tests/stability_evidence_tests.rs`.
+        (self.beta_per_day + self.gamma_per_day).max(self.omega_per_day)
+    }
+
+    fn to_array(state: &SirState) -> [f64; 4] {
+        [state.susceptible, state.infected, state.recovered, 0.0]
+    }
+
+    fn from_array([susceptible, infected, recovered, _]: [f64; 4]) -> SirState {
+        SirState {
+            susceptible,
+            infected,
+            recovered,
+        }
+    }
+
+    fn derivative(
+        &self,
+        population: f64,
+        [susceptible, infected, recovered, _]: [f64; 4],
+    ) -> [f64; 4] {
+        // Dividing first avoids multiplying two large population values.
+        let infection_flow = self.beta_per_day * (susceptible / population) * infected;
+        let recovery_flow = self.gamma_per_day * infected;
+        let waning_flow = self.omega_per_day * recovered;
+        [
+            waning_flow - infection_flow,
+            infection_flow - recovery_flow,
+            recovery_flow - waning_flow,
+            infection_flow,
+        ]
+    }
+
+    fn infectious(state: &SirState) -> f64 {
+        state.infected
+    }
+
+    fn model_metrics(&self, metrics: &mut EpidemicMetrics, initial: &SirState, _population: f64) {
+        let (gamma_per_day, omega_per_day) = (self.gamma_per_day, self.omega_per_day);
+        let r0 = metrics.basic_reproduction_number;
+        metrics.herd_immunity_threshold = Some(herd_immunity_threshold(r0));
+        // At the endemic equilibrium S* = N / R0, and gamma * I* = omega * R*
+        // with R* = N - S* - I*, which gives
+        // I* / N = (1 - 1/R0) * omega / (omega + gamma). Without waning
+        // (omega = 0) the infection still dies out, so the prevalence is 0, and
+        // with nobody infected at the start it can never take hold.
+        metrics.endemic_prevalence = Some(if initial.infected > 0.0 {
+            herd_immunity_threshold(r0) * omega_per_day / (omega_per_day + gamma_per_day)
+        } else {
+            0.0
+        });
+    }
 }

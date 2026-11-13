@@ -1,12 +1,12 @@
-use crate::accuracy::{StepErrorEstimate, estimate_step_error};
+use crate::accuracy::StepErrorEstimate;
 use crate::error::SimulationError;
 use crate::metrics::{
-    basic_reproduction_number, calculate_metrics, effective_reproduction_number,
-    final_size_fraction, herd_immunity_threshold,
+    EpidemicMetrics, basic_reproduction_number, effective_reproduction_number, final_size_fraction,
+    herd_immunity_threshold,
 };
+use crate::models::{Model, estimate, simulate};
 use crate::result::SimulationResult;
 use crate::settings::SimulationSettings;
-use crate::simulation::driver::run_simulation;
 use crate::validation;
 
 /// Rate parameters of the SEIR model, constant for the whole simulation.
@@ -147,79 +147,7 @@ pub fn simulate_seir(
     initial_state: SeirState,
     settings: SimulationSettings,
 ) -> Result<SimulationResult<SeirState>, SimulationError> {
-    parameters.validate()?;
-    let population = initial_state.initial_population()?;
-    let SeirParameters {
-        beta_per_day,
-        sigma_per_day,
-        gamma_per_day,
-    } = parameters;
-    // Exposed and infected feed each other (E -> I by progression, I -> E by
-    // transmission), so together they decay faster than sigma or gamma alone.
-    // This is the fast eigenvalue of that pair in a fully susceptible
-    // population, where the coupling is strongest.
-    let coupled_rate = (sigma_per_day + gamma_per_day) / 2.0
-        + (((sigma_per_day - gamma_per_day) / 2.0).powi(2) + sigma_per_day * beta_per_day).sqrt();
-    // Susceptibles empty at up to beta per day. A duration shorter than the
-    // step is integrated in one shorter step.
-    validation::stable_step(
-        settings.step_days().min(settings.duration_days()),
-        beta_per_day.max(coupled_rate),
-    )?;
-    // Checked now so that an unusable R0 is reported before any integration.
-    basic_reproduction_number(beta_per_day, gamma_per_day)?;
-
-    let output = run_simulation(
-        [
-            initial_state.susceptible,
-            initial_state.exposed,
-            initial_state.infected,
-            initial_state.recovered,
-            0.0,
-        ],
-        population,
-        settings,
-        |[susceptible, exposed, infected, _, _]| {
-            // Dividing first avoids multiplying two large population values.
-            let infection_flow = beta_per_day * (susceptible / population) * infected;
-            let progression_flow = sigma_per_day * exposed;
-            let recovery_flow = gamma_per_day * infected;
-            [
-                -infection_flow,
-                infection_flow - progression_flow,
-                progression_flow - recovery_flow,
-                recovery_flow,
-                infection_flow,
-            ]
-        },
-        |[susceptible, exposed, infected, recovered, _]| SeirState {
-            susceptible,
-            exposed,
-            infected,
-            recovered,
-        },
-        &["susceptible", "exposed", "infected", "recovered"],
-    )?;
-    let mut metrics = calculate_metrics(
-        &output.trajectory,
-        population,
-        beta_per_day,
-        gamma_per_day,
-        |state| state.infected,
-    )?;
-    let r0 = metrics.basic_reproduction_number;
-    metrics.herd_immunity_threshold = Some(herd_immunity_threshold(r0));
-    metrics.final_size_fraction = Some(final_size_fraction(
-        initial_state.susceptible,
-        initial_state.exposed + initial_state.infected,
-        population,
-        r0,
-    ));
-    Ok(SimulationResult {
-        trajectory: output.trajectory,
-        metrics,
-        diagnostics: output.diagnostics,
-    })
+    simulate(&parameters, initial_state, settings)
 }
 
 /// Estimates the error that the timestep introduces into [`simulate_seir`] for
@@ -269,21 +197,95 @@ pub fn estimate_seir_step_error(
     initial_state: SeirState,
     settings: SimulationSettings,
 ) -> Result<StepErrorEstimate, SimulationError> {
-    let run = simulate_seir(parameters, initial_state, settings)?;
-    let half_step_run = simulate_seir(parameters, initial_state, settings.halved())?;
-    Ok(estimate_step_error(
-        &run.trajectory,
-        &half_step_run.trajectory,
-        initial_state.initial_population()?,
-        |state| {
-            [
-                state.susceptible,
-                state.exposed,
-                state.infected,
-                state.recovered,
-            ]
-        },
-    ))
+    estimate(&parameters, initial_state, settings)
+}
+
+impl Model<5> for SeirParameters {
+    type State = SeirState;
+    const COMPARTMENTS: &'static [&'static str] =
+        &["susceptible", "exposed", "infected", "recovered"];
+
+    fn validate(&self) -> Result<(), SimulationError> {
+        SeirParameters::validate(self)
+    }
+
+    fn population(state: &SeirState) -> Result<f64, SimulationError> {
+        state.initial_population()
+    }
+
+    fn beta(&self) -> f64 {
+        self.beta_per_day
+    }
+
+    fn gamma(&self) -> f64 {
+        self.gamma_per_day
+    }
+
+    fn fastest_rate(&self) -> f64 {
+        let (beta_per_day, sigma_per_day, gamma_per_day) =
+            (self.beta_per_day, self.sigma_per_day, self.gamma_per_day);
+        // Exposed and infected feed each other (E -> I by progression, I -> E by
+        // transmission), so together they decay faster than sigma or gamma alone.
+        // This is the fast eigenvalue of that pair in a fully susceptible
+        // population, where the coupling is strongest.
+        let coupled_rate = (sigma_per_day + gamma_per_day) / 2.0
+            + (((sigma_per_day - gamma_per_day) / 2.0).powi(2) + sigma_per_day * beta_per_day)
+                .sqrt();
+        // Susceptibles empty at up to beta per day.
+        beta_per_day.max(coupled_rate)
+    }
+
+    fn to_array(state: &SeirState) -> [f64; 5] {
+        [
+            state.susceptible,
+            state.exposed,
+            state.infected,
+            state.recovered,
+            0.0,
+        ]
+    }
+
+    fn from_array([susceptible, exposed, infected, recovered, _]: [f64; 5]) -> SeirState {
+        SeirState {
+            susceptible,
+            exposed,
+            infected,
+            recovered,
+        }
+    }
+
+    fn derivative(
+        &self,
+        population: f64,
+        [susceptible, exposed, infected, _, _]: [f64; 5],
+    ) -> [f64; 5] {
+        // Dividing first avoids multiplying two large population values.
+        let infection_flow = self.beta_per_day * (susceptible / population) * infected;
+        let progression_flow = self.sigma_per_day * exposed;
+        let recovery_flow = self.gamma_per_day * infected;
+        [
+            -infection_flow,
+            infection_flow - progression_flow,
+            progression_flow - recovery_flow,
+            recovery_flow,
+            infection_flow,
+        ]
+    }
+
+    fn infectious(state: &SeirState) -> f64 {
+        state.infected
+    }
+
+    fn model_metrics(&self, metrics: &mut EpidemicMetrics, initial: &SeirState, population: f64) {
+        let r0 = metrics.basic_reproduction_number;
+        metrics.herd_immunity_threshold = Some(herd_immunity_threshold(r0));
+        metrics.final_size_fraction = Some(final_size_fraction(
+            initial.susceptible,
+            initial.exposed + initial.infected,
+            population,
+            r0,
+        ));
+    }
 }
 
 #[cfg(test)]
