@@ -10,6 +10,8 @@
 
 **Spec:** `TECHNICAL_SPEC.md` in the repository root (implements Part II of `Product_Vision_&_MVP_Product_Requirements_Document.md`; product direction is in Part I of the same file).
 
+> **Frozen at v0.1.0 (November 14, 2026).** This document records what release 0.1.0 set out to do and how it was built. It is no longer updated. For current behaviour, see `docs/`, the API documentation and `CHANGELOG.md`; design decisions after 0.1.0 are recorded under `design/`.
+
 **Status:** Complete. Tasks 1 to 13 are implemented. Tasks 1 to 10 were reviewed as a whole by an independent reviewer, and Tasks 11 and 12 came out of that review. Tasks 11 and 12 were then reviewed in turn, which led to Task 13. Task 13 itself has not been independently reviewed; its guard was checked by the randomised stability evidence test that improvement plan 002 added. Where the implementation departed from the task text, the Execution Notes section near the end records what was done and why. Work after this plan is summarised in "After This Plan" and tracked in `plans/README.md`.
 
 ## Global Constraints

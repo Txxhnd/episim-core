@@ -3,13 +3,15 @@
 
 **Document:** TECHNICAL_SPEC.md  
 **Version:** 0.2  
-**Status:** Approved and implemented; kept in step with the code on `master` (revised November 13, 2026)  
+**Status:** Frozen at v0.1.0 (last revised November 13, 2026)  
 **Product:** EPISIM-CORE  
 **Language:** Rust  
 **Edition:** 2024  
 **Minimum Supported Rust Version:** 1.85  
-**Target Release:** v0.1.0 (released November 13, 2026); next v0.2.0, which may change the public API  
+**Target Release:** v0.1.0 (released November 13, 2026)  
 **Architecture:** Pure Rust Library
+
+> **Frozen at v0.1.0 (November 14, 2026).** This document records what release 0.1.0 set out to do and how it was built. It is no longer updated. For current behaviour, see `docs/`, the API documentation and `CHANGELOG.md`; design decisions after 0.1.0 are recorded under `design/`.
 
 **Revision note (0.2).** This specification was written before implementation. Revision 0.2 brings it in line with the code: the manifest, project structure, settings, solver signature, simulation pipeline, error variants, tests, quality pipeline, decisions register and resolved questions. Sections already updated by later changes (the recording interval, the stability limit, the step-error estimate and the threshold quantities) are unchanged. Where a section still describes the original proposal, it says so.
 
@@ -764,6 +766,8 @@ Derivative array:
 ]
 ```
 
+The derivatives of SIS, SIRS and SEIRS add the waning or recovery-to-susceptible flows to these; their equations are in `docs/mathematical_models.md`. Every model's array ends with the cumulative infection count, whose derivative is the infection flow.
+
 ## 8.3 Important Mathematical Invariant
 
 For every model, the derivatives of the compartments sum to zero:
@@ -829,7 +833,7 @@ The public API must:
 
 The API follows established Rust library conventions for naming and public interfaces.
 
-## 10.2 Proposed Public Functions
+## 10.2 Public Functions
 
 ```rust
 pub fn simulate_sir(
@@ -847,7 +851,9 @@ pub fn simulate_seir(
 ) -> Result<SimulationResult<SeirState>, SimulationError>;
 ```
 
-Both functions must use the same internal solver infrastructure. The step-error estimates (Section 12.5) and the effective reproduction number (Section 10.6) complete the public functions.
+The waning-immunity models have the same shape: `simulate_sis(SisParameters, SisState, SimulationSettings)`, `simulate_sirs(SirsParameters, SirState, SimulationSettings)` and `simulate_seirs(SeirsParameters, SeirState, SimulationSettings)`, each returning `Result<SimulationResult<_>, SimulationError>` with its state type.
+
+All five functions use the same internal solver infrastructure. The step-error estimates (Section 12.5) and the effective reproduction number (Section 10.6) complete the public functions.
 
 ## 10.3 Observation Structure
 
@@ -1292,16 +1298,6 @@ RK4 should demonstrate fourth-order convergence in the asymptotic error region.
 
 The release acceptance threshold is a conservative error-reduction factor of at least 8 when halving the timestep in designated fixtures. The implemented fixtures compare the nonlinear models with a run at 1/64 day. The measured factors are 13.9 and 14.9 for SIR, and 15.6 and 15.8 for SEIR.
 
-## 13.6 Stability Evidence
-
-`tests/stability_evidence_tests.rs` keeps the measurement behind the stability limit of Section 6.3. It draws 250,000 random configurations from a fixed-seed generator and runs each at one day and at 1/64 day. It then counts accepted runs that are qualitatively wrong. It is ignored by default because it needs a release build:
-
-```bash
-cargo test --release --test stability_evidence_tests -- --ignored --nocapture
-```
-
-It reports 226,590 accepted SIR runs, 107,633 accepted SEIR runs, 108,560 accepted SIS runs, 106,450 accepted SIRS runs and 8,501 accepted SEIRS runs, none flagged. The SIS and SIRS rows reuse the SIR draws, the SEIRS rows reuse the SEIR draws, and SIRS and SEIRS take `omega` from a second generator. An SIS run is flagged if its infected move away from or across their equilibrium, or its cumulative infections fall. A SIRS or SEIRS run is flagged if a compartment or the cumulative infections move against the exact flow over a step. A smaller sample in the normal test suite was tried and rejected: with 500 configurations it could detect neither a loosened limit nor a missing coupled SEIR rate.
-
 ## 13.5 Population Conservation Tests
 
 Every supported reference scenario must satisfy:
@@ -1311,6 +1307,16 @@ Every supported reference scenario must satisfy:
 \]
 
 This must be checked across the entire trajectory, not only at its endpoint.
+
+## 13.6 Stability Evidence
+
+`tests/stability_evidence_tests.rs` keeps the measurement behind the stability limit of Section 6.3. It draws 250,000 random configurations from a fixed-seed generator and runs each at one day and at 1/64 day. It then counts accepted runs that are qualitatively wrong. It is ignored by default because it needs a release build:
+
+```bash
+cargo test --release --test stability_evidence_tests -- --ignored --nocapture
+```
+
+It reports 226,590 accepted SIR runs, 107,633 accepted SEIR runs, 108,560 accepted SIS runs, 106,450 accepted SIRS runs and 8,501 accepted SEIRS runs, none flagged. The SIS and SIRS rows reuse the SIR draws, the SEIRS rows reuse the SEIR draws, and SIRS and SEIRS take `omega` from a second generator. An SIS run is flagged if its infected move away from or across their equilibrium, or its cumulative infections fall. A SIRS or SEIRS run is flagged if a compartment or the cumulative infections move against the exact flow over a step. A smaller sample in the normal test suite was tried and rejected: with 500 configurations it could detect neither a loosened limit nor a missing coupled SEIR rate.
 
 ---
 

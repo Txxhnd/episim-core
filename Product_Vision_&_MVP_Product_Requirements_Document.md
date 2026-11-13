@@ -9,6 +9,8 @@
 **Release target:** v0.1.0  
 **Working name:** EPISIM-CORE
 
+> **Frozen at v0.1.0 (November 14, 2026).** This document records what release 0.1.0 set out to do and how it was built. It is no longer updated. For current behaviour, see `docs/`, the API documentation and `CHANGELOG.md`; design decisions after 0.1.0 are recorded under `design/`.
+
 **Revision note (0.3).** Release 0.1.0 is tagged `v0.1.0`. It contains the MVP described in Part II, plus the waning-immunity models (SIS, SIRS, SEIRS) added before the release. It has not been published to crates.io.
 
 **Revision note (0.2).** The MVP described in Part II is implemented on `master`. Section 13 records the evidence for each acceptance criterion, and Section 20 lists what was added after the MVP baseline and what is planned next. The requirements themselves are unchanged, except where a section says it was revised.
@@ -660,9 +662,9 @@ The competitive landscape must be reviewed again before public release.
 
 # PART III. PRODUCT DECISIONS AND APPROVAL
 
-## 18. Proposed MVP Decisions
+## 18. MVP Decisions
 
-The following decisions define the proposed baseline for implementation.
+The following decisions defined the baseline for implementation.
 
 | Decision | Selection | Status |
 |---|---|---|
