@@ -39,6 +39,16 @@ the public API; every breaking change is listed here.
 
 ### Fixed
 
+- The step-error estimates split every step the run actually takes, including
+  a final step shortened to the duration. They used to halve the nominal
+  step, so a run whose only step was shorter than the nominal one reported an
+  error of 0 (issue #1).
+- SEIRS `endemic_prevalence` is computed from rate ratios, so it no longer
+  overflows to 0 or loses precision when every rate is scaled by a very large
+  or very small factor (issue #2).
+- `final_size_fraction` is solved in fractions of the population, so it no
+  longer overflows for populations near `f64::MAX` (issue #3).
+
 - `endemic_prevalence` is 0 for SIS, SIRS and SEIRS runs that start with
   nobody infected (for SEIRS, nobody exposed or infected). It used to report
   the endemic level, `1 - 1/R0` for SIS, although such a run never leaves

@@ -227,8 +227,11 @@ estimated error = 16/15 * largest difference between the two runs
 ```
 
 taken over every compartment at every recorded time. The half-step run
-records the same times as the original: its recording interval and its step
-limit are both doubled.
+splits every step the original takes into two equal halves, including a
+final step shortened to the duration and a single step shorter than the
+nominal one, so it records the same times on the same grid. (Halving the
+nominal step instead would leave such steps unrefined; with a step of 2
+days over 1 day it reported an error of 0.)
 
 | Field | Meaning |
 |---|---|

@@ -206,7 +206,7 @@ assert!(estimate.max_absolute_error < 1e-3);
 ```
 
 `estimate_seir_step_error` does the same for SEIR. The estimate reruns the
-simulation at half the step and compares the two, so it costs about three
+simulation with every step split in two and compares the two, so it costs about three
 times as much as one run. It measures the error from the step size only,
 not how well the model matches reality.
 Every recorded observation is kept in memory (40 bytes each for SIR, 48 for
