@@ -130,10 +130,11 @@ pub fn simulate_seirs(
 /// Estimates the error that the timestep introduces into [`simulate_seirs`]
 /// for the same arguments.
 ///
-/// The simulation is run twice, once as given and once at half the timestep,
-/// and the two trajectories, cumulative infections included, are compared at
+/// The simulation is run twice, once as given and once with every step it
+/// takes split into two equal halves, and the two trajectories, cumulative infections included, are compared at
 /// every recorded time. This costs about three times as much as one run. The
-/// half-step run is allowed twice the configured step limit.
+/// refined run takes twice as many steps; the step limit counts the steps of
+/// the original run.
 ///
 /// # Errors
 ///
@@ -230,15 +231,17 @@ impl Model<5> for SeirsParameters {
         metrics.herd_immunity_threshold = Some(herd_immunity_threshold(r0));
         // At the endemic equilibrium S* = N / R0, sigma * E* = gamma * I* and
         // gamma * I* = omega * R*, so the N (1 - 1/R0) not susceptible split as
-        // E* : I* : R* = gamma/sigma : 1 : gamma/omega. Written with omega in the
-        // numerator, so that omega = 0 gives 0 without dividing by zero. With
-        // nobody exposed or infected at the start the infection can never take hold.
-        // R0 is scaled by the multiplier the run ends under.
-        metrics.endemic_prevalence = Some(if initial.exposed + initial.infected > 0.0 {
-            herd_immunity_threshold(r0 * final_multiplier) * omega_per_day
-                / (omega_per_day + gamma_per_day + gamma_per_day * omega_per_day / sigma_per_day)
-        } else {
-            0.0
-        });
+        // E* : I* : R* = gamma/sigma : 1 : gamma/omega. Only rate ratios appear,
+        // so rescaling every rate cannot overflow. Without waning the infection
+        // dies out, and with nobody exposed or infected at the start it can
+        // never take hold. R0 is scaled by the multiplier the run ends under.
+        metrics.endemic_prevalence = Some(
+            if omega_per_day > 0.0 && initial.exposed + initial.infected > 0.0 {
+                herd_immunity_threshold(r0 * final_multiplier)
+                    / (1.0 + gamma_per_day / sigma_per_day + gamma_per_day / omega_per_day)
+            } else {
+                0.0
+            },
+        );
     }
 }

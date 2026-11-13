@@ -15,6 +15,9 @@ pub struct SimulationSettings {
     max_steps: usize,
     record_every: usize,
     transmission_schedule: Option<TransmissionSchedule>,
+    /// Number of equal RK4 substeps each step is integrated in; 1 except in
+    /// the refined run of a step-error estimate.
+    substeps: usize,
 }
 
 impl SimulationSettings {
@@ -41,6 +44,7 @@ impl SimulationSettings {
             max_steps: DEFAULT_MAX_STEPS,
             record_every: 1,
             transmission_schedule: None,
+            substeps: 1,
         })
     }
 
@@ -169,19 +173,24 @@ impl SimulationSettings {
             .any(|&(_, multiplier)| multiplier != 1.0)
     }
 
-    /// The same run at half the timestep, recording the same times.
+    /// The same run with every step actually taken split into two equal
+    /// halves, recording the same times.
     ///
-    /// Halving the step doubles the number of steps, so the step limit and
-    /// the recording interval are doubled with it. A schedule on the original
-    /// step grid is also on the halved one.
+    /// The steps are split rather than the nominal step halved, so a final
+    /// step shortened to the duration, or a single step shorter than the
+    /// nominal one, is refined too. The step grid is unchanged, so the step
+    /// limit, the recording interval and the schedule apply as before, to
+    /// twice as many integration steps.
     pub(crate) fn halved(&self) -> Self {
         Self {
-            duration_days: self.duration_days,
-            step_days: self.step_days / 2.0,
-            max_steps: self.max_steps.saturating_mul(2),
-            record_every: self.record_every.saturating_mul(2),
-            transmission_schedule: self.transmission_schedule.clone(),
+            substeps: self.substeps.saturating_mul(2),
+            ..self.clone()
         }
+    }
+
+    /// Number of equal RK4 substeps each step is integrated in.
+    pub(crate) fn substeps(&self) -> usize {
+        self.substeps
     }
 
     /// Total simulation duration in days.

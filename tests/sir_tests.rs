@@ -525,3 +525,54 @@ fn sir_effective_reproduction_number_rejects_invalid_input() {
         SimulationError::MetricOverflow
     );
 }
+
+#[test]
+fn sir_step_error_estimate_refines_a_step_longer_than_the_run() {
+    // Issue #1: with a step of 2 days and a duration of 1, the run takes one
+    // step of 1 day. The estimate must refine that step, not the nominal one.
+    // Pure recovery, I(t) = 1000 * exp(-t), gives the true error.
+    let parameters = SirParameters {
+        beta_per_day: 0.0,
+        gamma_per_day: 1.0,
+    };
+    let initial = SirState {
+        susceptible: 0.0,
+        infected: 1000.0,
+        recovered: 0.0,
+    };
+    let run = simulate_sir(parameters, initial, settings(1.0, 2.0)).unwrap();
+    let actual = (run.trajectory.last().unwrap().state.infected - 1000.0 * (-1.0_f64).exp()).abs();
+    let estimate =
+        episim_core::estimate_sir_step_error(parameters, initial, settings(1.0, 2.0)).unwrap();
+    let ratio = estimate.max_absolute_error / actual;
+    assert!(
+        (0.9..1.1).contains(&ratio),
+        "estimated {estimate:?}, actual {actual}"
+    );
+}
+
+#[test]
+fn sir_final_size_does_not_depend_on_the_population_scale() {
+    // Issue #3: the final size is a fraction of N, so scaling every
+    // compartment must not change it, even near the largest f64.
+    let final_size = |population: f64| {
+        let initial = SirState {
+            susceptible: 0.99 * population,
+            infected: 0.01 * population,
+            recovered: 0.0,
+        };
+        simulate_sir(PARAMETERS, initial, settings(1.0, 0.25))
+            .unwrap()
+            .metrics
+            .final_size_fraction
+            .unwrap()
+    };
+    let reference = final_size(1000.0);
+    for population in [1e-300, 1e300, 1e308] {
+        let fraction = final_size(population);
+        assert!(
+            (fraction - reference).abs() < 1e-12,
+            "N {population:e}: {fraction} vs {reference}"
+        );
+    }
+}

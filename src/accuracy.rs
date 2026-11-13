@@ -7,7 +7,8 @@ const RICHARDSON_FACTOR: f64 = 16.0 / 15.0;
 
 /// Estimated error that the timestep introduces into a simulation.
 ///
-/// The estimate compares the run with the same run at half the timestep. It
+/// The estimate compares the run with the same run with every step split
+/// into two equal halves. It
 /// measures discretisation error only: how far the numerical trajectory is
 /// from the exact solution of the model equations. It says nothing about how
 /// well the model describes a real outbreak.

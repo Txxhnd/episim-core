@@ -50,6 +50,7 @@ where
     let step = settings.step_days();
     let required_steps = required_steps(&settings)?;
     let record_every = settings.record_every();
+    let substeps = settings.substeps();
     // The initial state, every `record_every`-th step, and the final step.
     let capacity = required_steps
         .div_ceil(record_every)
@@ -76,9 +77,20 @@ where
         // The schedule's changes lie on the step grid, so one multiplier holds
         // for the whole step and RK4 keeps its order.
         let multiplier = settings.multiplier_for_step(index - 1);
-        state = rk4_step(state, step.min(duration - time), |values| {
-            derivative(multiplier, values)
-        })?;
+        // A step-error estimate's refined run splits every step, including a
+        // shortened final one, into equal substeps; each is checked.
+        let substep = step.min(duration - time) / substeps as f64;
+        for substep_index in 0..substeps {
+            state = rk4_step(state, substep, |values| derivative(multiplier, values))?;
+            if substep_index + 1 < substeps {
+                check_state(
+                    &state[..compartments],
+                    compartment_names,
+                    population,
+                    &mut diagnostics,
+                )?;
+            }
+        }
         // Times come from the step index, not from repeated addition, so
         // rounding does not accumulate; the last one is the duration itself.
         time = if index == required_steps {
@@ -95,7 +107,7 @@ where
         if index % record_every == 0 || index == required_steps {
             trajectory.push(observe(time, state));
         }
-        diagnostics.steps_executed = index;
+        diagnostics.steps_executed = index * substeps;
     }
     Ok(SimulationOutput {
         trajectory,
@@ -490,6 +502,30 @@ mod tests {
         let output = run([0.0, 1000.0], sparse(2.0), tiny_flow).unwrap();
         assert_eq!(output.trajectory.len(), 2);
         assert_eq!(output.diagnostics.tolerated_negative_value_count, 2);
+    }
+
+    #[test]
+    fn driver_halved_settings_split_every_step_actually_taken() {
+        // Issue #1: the half-step run must split each step the run takes,
+        // including a final step shortened to the duration and a single step
+        // shorter than the nominal one, and record the same times.
+        for (duration, step, steps) in [(10.0, 3.0, 4), (1.0, 2.0, 1)] {
+            let settings = settings(duration, step);
+            let run = run([100.0, 0.0], settings.clone(), unit_flow).unwrap();
+            let half = run_simulation_with(&settings.halved());
+            assert_eq!(times(&half), times(&run), "duration {duration}");
+            assert_eq!(run.diagnostics.steps_executed, steps);
+            assert_eq!(
+                half.diagnostics.steps_executed,
+                2 * steps,
+                "duration {duration}"
+            );
+        }
+    }
+
+    /// Runs the unit flow from `[100, 0]` with the given settings.
+    fn run_simulation_with(settings: &SimulationSettings) -> SimulationOutput<[f64; 2]> {
+        run([100.0, 0.0], settings.clone(), unit_flow).unwrap()
     }
 
     #[test]

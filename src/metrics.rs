@@ -105,9 +105,11 @@ pub(crate) fn final_size_fraction(susceptible: f64, seed: f64, population: f64, 
     if seed == 0.0 || r0 == 0.0 || susceptible == 0.0 {
         return 0.0;
     }
-    let gap = |remaining: f64| {
-        remaining - susceptible * (-r0 * (susceptible + seed - remaining) / population).exp()
-    };
+    // Solved in fractions of N, so that R0 times a population near f64::MAX
+    // cannot overflow.
+    let (susceptible, seed) = (susceptible / population, seed / population);
+    let gap =
+        |remaining: f64| remaining - susceptible * (-r0 * (susceptible + seed - remaining)).exp();
     // gap(0) < 0 <= gap(S(0)) and gap is concave, so exactly one root lies
     // between; bisection narrows it to adjacent floating-point values.
     let (mut low, mut high) = (0.0_f64, susceptible);
@@ -122,7 +124,7 @@ pub(crate) fn final_size_fraction(susceptible: f64, seed: f64, population: f64, 
             high = middle;
         }
     }
-    (susceptible - high) / population
+    susceptible - high
 }
 
 /// Derives the metrics every model shares from a recorded trajectory,

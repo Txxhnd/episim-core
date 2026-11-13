@@ -325,3 +325,28 @@ fn seirs_effective_reproduction_number_rejects_invalid_input() {
         SimulationError::MetricOverflow
     );
 }
+
+#[test]
+fn seirs_endemic_prevalence_does_not_depend_on_the_time_unit() {
+    // Issue #2: scaling every rate by the same factor only changes the time
+    // unit, so the endemic equilibrium must not change.
+    let prevalence = |scale: f64| {
+        simulate_seirs(
+            parameters(0.3 * scale, 0.2 * scale, 0.1 * scale, 0.01 * scale),
+            INITIAL,
+            settings(1.0 / scale, 0.25 / scale),
+        )
+        .unwrap()
+        .metrics
+        .endemic_prevalence
+        .unwrap()
+    };
+    let reference = prevalence(1.0);
+    for scale in [1e160, 1e-200] {
+        let value = prevalence(scale);
+        assert!(
+            (value - reference).abs() < 1e-12,
+            "scale {scale:e}: {value} vs {reference}"
+        );
+    }
+}

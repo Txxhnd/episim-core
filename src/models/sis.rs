@@ -130,10 +130,11 @@ pub fn simulate_sis(
 /// Estimates the error that the timestep introduces into [`simulate_sis`] for
 /// the same arguments.
 ///
-/// The simulation is run twice, once as given and once at half the timestep,
-/// and the two trajectories, cumulative infections included, are compared at
+/// The simulation is run twice, once as given and once with every step it
+/// takes split into two equal halves, and the two trajectories, cumulative infections included, are compared at
 /// every recorded time. This costs about three times as much as one run. The
-/// half-step run is allowed twice the configured step limit.
+/// refined run takes twice as many steps; the step limit counts the steps of
+/// the original run.
 ///
 /// # Errors
 ///

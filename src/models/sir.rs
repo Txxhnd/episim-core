@@ -152,10 +152,10 @@ pub fn simulate_sir(
 /// Estimates the error that the timestep introduces into [`simulate_sir`] for
 /// the same arguments.
 ///
-/// The simulation is run twice, once as given and once at half the timestep,
-/// and the two trajectories are compared at every recorded time. This costs
-/// about three times as much as one run. The half-step run is allowed twice
-/// the configured step limit.
+/// The simulation is run twice, once as given and once with every step it
+/// takes split into two equal halves, and the two trajectories are compared at every recorded time. This costs
+/// about three times as much as one run. The refined run takes twice as many
+/// steps; the step limit counts the steps of the original run.
 ///
 /// The estimate assumes the timestep is small enough for the solver's error
 /// to fall sixteenfold when the step is halved. In the reference scenarios
