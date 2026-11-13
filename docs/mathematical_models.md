@@ -20,7 +20,9 @@ tracks expected counts, not whole individuals.
 
 1. The population is closed: no births, deaths, or migration.
 2. Individuals mix homogeneously.
-3. Parameters are constant over the simulation.
+3. Parameters are constant over the simulation, except that a transmission
+   schedule can change the transmission rate on given days (see
+   "Time-varying transmission").
 4. In SIR and SEIR, recovered individuals are permanently immune. In SIRS
    and SEIRS their immunity wanes, and in SIS recovery gives no immunity.
 5. Only the infected compartment transmits infection.
@@ -168,6 +170,34 @@ I* = N * (1 - 1/R0) / (1 + gamma/sigma + gamma/omega)
 E* = (gamma / sigma) * I*
 R* = (gamma / omega) * I*
 ```
+
+## Time-varying transmission
+
+A `TransmissionSchedule` replaces `beta` in every model's equations with
+
+```text
+beta(t) = beta * m(t)
+```
+
+where `m(t)` is piecewise constant: 1 until the first change, then the
+multiplier of the latest change on or before `t`. A multiplier below 1
+models fewer contacts, for example a lockdown; above 1, more. The schedule is
+attached with `SimulationSettings::with_transmission_schedule`, and every
+change day must be a whole number of steps, so each step sees one value of
+`beta`.
+
+The metrics follow these rules under a schedule:
+
+| Metric | Under a schedule |
+|---|---|
+| `basic_reproduction_number`, `herd_immunity_threshold` | The values for `beta`, without the schedule. |
+| `final_size_fraction` | `None` once any multiplier differs from 1. The final size equation assumes a constant `beta`; under a lockdown from day 20 to 50 at 40% contacts it would report 0.931 where the run reaches 0.817. |
+| `endemic_prevalence` | Computed with `R0 * m`, where `m` is the multiplier in force at the end of the run: that is the equilibrium the run settles to. |
+| peak, cumulative infections, incidence | Read from the trajectory as before. |
+
+The effective reproduction number under a schedule is
+`m(t) * R0 * S / N`. Multiply the value of `effective_reproduction_number`
+by `TransmissionSchedule::multiplier_at(t)`.
 
 ## Initial state
 

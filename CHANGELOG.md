@@ -11,11 +11,24 @@ the public API; every breaking change is listed here.
 
 ### Added
 
+- `TransmissionSchedule`, a piecewise-constant multiplier on the
+  transmission rate, attached with
+  `SimulationSettings::with_transmission_schedule`, for interventions such
+  as lockdowns. Works with every model and with the step-error estimates.
+  The stability limit uses the largest transmission rate in force.
+- `SimulationError::InvalidSchedule` and
+  `SimulationError::ScheduleChangeOffStepGrid { day }`.
 - A GitHub Actions workflow, "Stability evidence", that runs the release-mode
   stability evidence test every Monday and on demand.
 
 ### Changed
 
+- **Breaking:** `SimulationSettings` is `Clone` but no longer `Copy`, because
+  it can hold a transmission schedule. Clone settings to reuse them after a
+  call.
+- Under a transmission schedule that changes the multiplier,
+  `final_size_fraction` is `None`, and `endemic_prevalence` uses the
+  multiplier in force at the end of the run.
 - The SIRS stability limit is `beta + gamma + omega`, as for SEIRS, instead
   of `max(beta + gamma, omega)`. The old limit accepted steps that ended a
   quarter of the population away from the exact solution when `omega` was

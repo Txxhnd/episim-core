@@ -1,6 +1,6 @@
 name: Stability evidence
 
-# The measurement behind the timestep stability limits takes about three
+# The measurement behind the timestep stability limits takes about four
 # minutes in release mode, so it is not part of the CI run on every push.
 on:
   workflow_dispatch:

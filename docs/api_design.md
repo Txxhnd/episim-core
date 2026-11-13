@@ -16,7 +16,8 @@ private.
 | `estimate_sir_step_error`, `estimate_seir_step_error`, `estimate_sis_step_error`, `estimate_sirs_step_error`, `estimate_seirs_step_error` | function | Estimate the error the timestep introduces, by comparing with a run at half the step. |
 | `SirParameters`, `SeirParameters`, `SisParameters`, `SirsParameters`, `SeirsParameters` | struct | Rate parameters, per day. |
 | `SirState`, `SeirState`, `SisState` | struct | Compartment values (`SirState` also for SIRS, `SeirState` also for SEIRS); used for the initial state and for each observation. |
-| `SimulationSettings` | struct | Duration, timestep, and step limit. |
+| `SimulationSettings` | struct | Duration, timestep, step limit, recording interval, and optional transmission schedule. `Clone`, not `Copy`. |
+| `TransmissionSchedule` | struct | Piecewise-constant multiplier on the transmission rate, attached with `SimulationSettings::with_transmission_schedule`; `multiplier_at(day)` gives the multiplier in force. |
 | `SimulationResult<S>` | struct | Trajectory, metrics, and diagnostics. |
 | `Observation<S>` | struct | A time in days, the cumulative infections since day zero, and the state at that time. |
 | `EpidemicMetrics` | struct | Model-derived summary metrics. |
@@ -68,7 +69,7 @@ pub fn simulate_seir(
 
 | Group | Variants | When |
 |---|---|---|
-| Invalid configuration | `InvalidParameter { name }`, `InvalidDuration`, `InvalidTimeStep`, `InvalidMaximumSteps`, `InvalidRecordInterval`, `TimeStepTooLarge { max_step_days }` | A rate, duration, timestep, step limit, or recording interval is outside its valid range, or the timestep is too large for stable integration (the model's fastest decay rate times the step is above 2; `max_step_days` is the largest step that would be accepted). `name` is the field name, for example `"gamma_per_day"`. |
+| Invalid configuration | `InvalidParameter { name }`, `InvalidDuration`, `InvalidTimeStep`, `InvalidMaximumSteps`, `InvalidRecordInterval`, `InvalidSchedule`, `ScheduleChangeOffStepGrid { day }`, `TimeStepTooLarge { max_step_days }` | A rate, duration, timestep, step limit, recording interval or transmission schedule is outside its valid range, a schedule change is not a whole number of steps, or the timestep is too large for stable integration (the model's fastest decay rate times the step is above 2; `max_step_days` is the largest step that would be accepted). `name` is the field name, for example `"gamma_per_day"`. |
 | Invalid initial population | `InvalidInitialState { compartment }`, `InvalidPopulation` | A compartment is negative or not finite, or the total is zero or not finite. |
 | Numerical instability | `NonFiniteIntermediate { stage }`, `NonFiniteNumericalState { compartment }`, `NegativeCompartment { compartment }`, `PopulationConservationViolation` | The integration produced a value the library will not accept. |
 | Resource limits | `StepLimitExceeded`, `TimeStepTooSmall`, `AllocationFailure` | The run needs more steps than allowed, a step too small for `f64` time, or more memory than could be reserved. |
@@ -96,7 +97,9 @@ match simulate_sir(parameters, initial_state, settings) {
 
 ## Stability
 
-This is a 0.1 release. The public API may still change before 1.0.
+The public API may still change before 1.0. Version 0.2 made
+`SimulationSettings` `Clone` but not `Copy`, because it can hold a
+transmission schedule.
 `SimulationError` is marked `#[non_exhaustive]`: it may gain variants, so
 the compiler requires a wildcard arm when you match on it.
 `EpidemicMetrics` is `#[non_exhaustive]` too: it may gain fields, so code

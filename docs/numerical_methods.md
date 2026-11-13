@@ -172,6 +172,16 @@ compartment, so it is neither sign-checked nor summed into `N(t)`.
   The GitHub Actions workflow "Stability evidence"
   (`.github/workflows/stability-evidence.yml`) runs it every Monday and on
   demand, with `gh workflow run "Stability evidence"`.
+- **With a transmission schedule**, the limit uses the largest `beta * m`
+  in force during the run, in the model's own fastest-rate formula. Each
+  step sees one multiplier, so within a step the model is an ordinary
+  constant-parameter model, and the largest `beta` is the one that must be
+  stable. The ignored test `stability_evidence_with_schedules` repeats the
+  measurement with random three-segment schedules (multipliers in `[0, 2)`)
+  for all five models. It accepts 186,723 SIR, 88,632 SEIR, 89,424 SIS,
+  29,479 SIRS and 7,012 SEIRS runs, none flagged. With only the `beta` in
+  force at day 0, the design study (`design/016-time-varying-transmission.md`)
+  flagged 97 SIR and 57 SEIR runs.
 - **Inaccuracy is not detected.** The limit is a stability guard, not an
   accuracy target. At the limit a run still has large errors: with
   `gamma * step = 2` the infected compartment falls to 33% per step where
@@ -182,6 +192,29 @@ compartment, so it is neither sign-checked nor summed into `N(t)`.
 
 A practical check is to rerun with half the step and compare.
 `estimate_sir_step_error` and `estimate_seir_step_error` do exactly that.
+
+## Transmission schedules
+
+A `TransmissionSchedule` changes `beta` on given days. The driver gives the
+derivative one multiplier per step, the one in force at the start of the
+step. It finds that multiplier by step index, not by comparing times, so
+rounding in `index * step` cannot put a step in the wrong segment.
+
+This keeps fourth-order accuracy only if every change falls on the step
+grid, so `with_transmission_schedule` rejects a change day that is not a
+whole number of steps (within four units in the last place) with
+`ScheduleChangeOffStepGrid { day }`. Measured in the design study on SIR
+(`beta = 0.3`, `gamma = 0.1`, contacts at 40% from day 20 to day 50), as
+the largest error against a fine run:
+
+| Changes | Step 1 day | 1/2 day | 1/4 day |
+|---|---|---|---|
+| on the step grid | 4.2e-3 | 2.8e-4 | 1.8e-5 people (falls 15x per halving) |
+| a third of a day off the grid | 19 | 4.9 | 3.7 people (does not converge at fourth order) |
+
+Reading `beta` at each RK4 stage's own time instead is about 1,000 times
+worse on the grid. The last stage of the step before a change would already
+see the new value.
 
 ## Estimating the step error
 

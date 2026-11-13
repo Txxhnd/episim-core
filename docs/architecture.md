@@ -18,6 +18,7 @@ simulate_sir / _seir / _sis / _sirs / _seirs   src/models/
        - count steps, enforce the step limit
        - reserve the trajectory
        - for each step:
+           look up the step's transmission multiplier
            rk4_step                   src/solver/rk4.rs
            check the new state
            record an observation
@@ -31,7 +32,8 @@ simulate_sir / _seir / _sis / _sirs / _seirs   src/models/
 |---|---|---|
 | `lib.rs` | public | Crate attributes and re-exports. |
 | `error.rs` | type is public | `SimulationError` and its `Display` text. |
-| `settings.rs` | type is public | `SimulationSettings`: validated duration, step, and step limit. |
+| `settings.rs` | type is public | `SimulationSettings`: validated duration, step, step limit, recording interval, and transmission schedule, with the per-step multiplier lookups. |
+| `schedule.rs` | type is public | `TransmissionSchedule`: a validated piecewise-constant multiplier on `beta`. |
 | `validation.rs` | private | Range checks for rates and for the initial population. |
 | `models/mod.rs` | private | The private `Model` trait and the shared `simulate` and `estimate` pipeline. |
 | `models/sir.rs`, `models/seir.rs`, `models/sis.rs`, `models/sirs.rs`, `models/seirs.rs` | types and functions are public | Parameter and state types, each model's `Model` implementation (equations, stability rate, model-specific metrics), and the public `simulate_*` and `estimate_*_step_error` functions, which call the shared pipeline. |

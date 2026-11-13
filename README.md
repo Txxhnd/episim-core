@@ -74,7 +74,37 @@ cargo run --example basic_sir
 cargo run --example basic_seir
 ```
 
-Two more are meant for teaching. One prints a whole outbreak as CSV, one row
+### Interventions over time
+
+A `TransmissionSchedule` multiplies the transmission rate from given days on,
+for example to model a lockdown. Attach it to the settings:
+
+```rust
+use episim_core::{
+    SimulationError, SimulationSettings, SirParameters, SirState, TransmissionSchedule,
+    simulate_sir,
+};
+
+let parameters = SirParameters { beta_per_day: 0.3, gamma_per_day: 0.1 };
+let initial_state = SirState { susceptible: 990.0, infected: 10.0, recovered: 0.0 };
+
+// Contacts at 40% from day 20, back to normal from day 50.
+let lockdown = TransmissionSchedule::new(&[(20.0, 0.4), (50.0, 1.0)])?;
+let settings = SimulationSettings::new(400.0, 0.25)?.with_transmission_schedule(lockdown)?;
+let result = simulate_sir(parameters, initial_state, settings)?;
+
+// Fewer people are infected than the 93% without the lockdown.
+assert!(result.metrics.cumulative_incidence_fraction < 0.85);
+// The final size formula assumes a constant transmission rate.
+assert_eq!(result.metrics.final_size_fraction, None);
+# Ok::<(), SimulationError>(())
+```
+
+Change days must fall on the step grid (a whole number of steps), so that
+every step sees a single transmission rate. `SimulationSettings` holds the
+schedule, so it is `Clone` but not `Copy`; clone settings to reuse them.
+
+Two more examples are meant for teaching. One prints a whole outbreak as CSV, one row
 per day, to chart in a spreadsheet; the other prints a table of how peak,
 timing and final size change with R0:
 
@@ -123,7 +153,8 @@ All models assume:
 
 1. A closed population: no births, deaths, or migration.
 2. Homogeneous mixing.
-3. Parameters that stay constant for the whole simulation.
+3. Parameters that stay constant for the whole simulation, except that a
+   transmission schedule can change the transmission rate on given days.
 4. Permanent immunity after recovery in SIR and SEIR, immunity that wanes
    in SIRS and SEIRS, and none in SIS.
 5. Transmission only from the infected compartment.
@@ -137,9 +168,10 @@ is not the clinical incubation period.
 ## Scope and limitations
 
 The library contains the SIR, SEIR, SIS, SIRS and SEIRS models and one
-solver. It has no command-line interface, serialization, stochastic or agent-based models, age
-structure, interventions, time-varying parameters, parameter fitting, or
-estimation of `Rt` from case data.
+solver. It has no command-line interface, serialization, stochastic or agent-based
+models, age structure, smoothly varying parameters such as seasonality,
+parameter fitting, or estimation of `Rt` from case data. Interventions are
+modelled only as step changes in the transmission rate.
 
 The solver uses a fixed step and has no error control. Choose a step that is
 small compared with `1 / beta`, `1 / sigma`, `1 / gamma`, and `1 / omega`. A run is
