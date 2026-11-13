@@ -344,7 +344,7 @@ fn sir_surfaces_step_limit_clock_and_population_errors() {
 #[test]
 fn sir_records_every_nth_step_without_changing_the_integration() {
     let every_step = settings(160.0, 0.25);
-    let daily = every_step.with_record_every(4).unwrap();
+    let daily = every_step.clone().with_record_every(4).unwrap();
     let full = simulate_sir(PARAMETERS, INITIAL, every_step).unwrap();
     let thinned = simulate_sir(PARAMETERS, INITIAL, daily).unwrap();
 
@@ -430,7 +430,7 @@ fn sir_step_error_estimate_falls_about_sixteenfold_when_the_step_is_halved() {
 #[test]
 fn sir_step_error_estimate_follows_the_recording_interval_and_reports_errors() {
     let every_step = settings(40.0, 0.5);
-    let sparse = every_step.with_record_every(8).unwrap();
+    let sparse = every_step.clone().with_record_every(8).unwrap();
     let all = episim_core::estimate_sir_step_error(PARAMETERS, INITIAL, every_step).unwrap();
     let some = episim_core::estimate_sir_step_error(PARAMETERS, INITIAL, sparse).unwrap();
     // The largest error over fewer recorded times cannot be larger.

@@ -167,11 +167,11 @@ impl Model<5> for SeirsParameters {
         self.gamma_per_day
     }
 
-    fn fastest_rate(&self) -> f64 {
+    fn fastest_rate(&self, beta_per_day: f64) -> f64 {
         // The sum of all four rates. Tighter formulas built from SEIR's coupled
         // rate let through runs whose recovered compartment rises over a step
         // where it should fall. Measured; see `tests/stability_evidence_tests.rs`.
-        self.beta_per_day + self.sigma_per_day + self.gamma_per_day + self.omega_per_day
+        beta_per_day + self.sigma_per_day + self.gamma_per_day + self.omega_per_day
     }
 
     fn to_array(state: &SeirState) -> [f64; 5] {
@@ -195,11 +195,12 @@ impl Model<5> for SeirsParameters {
 
     fn derivative(
         &self,
+        beta_per_day: f64,
         population: f64,
         [susceptible, exposed, infected, recovered, _]: [f64; 5],
     ) -> [f64; 5] {
         // Dividing first avoids multiplying two large population values.
-        let infection_flow = self.beta_per_day * (susceptible / population) * infected;
+        let infection_flow = beta_per_day * (susceptible / population) * infected;
         let progression_flow = self.sigma_per_day * exposed;
         let recovery_flow = self.gamma_per_day * infected;
         let waning_flow = self.omega_per_day * recovered;
@@ -216,7 +217,13 @@ impl Model<5> for SeirsParameters {
         state.infected
     }
 
-    fn model_metrics(&self, metrics: &mut EpidemicMetrics, initial: &SeirState, _population: f64) {
+    fn model_metrics(
+        &self,
+        metrics: &mut EpidemicMetrics,
+        initial: &SeirState,
+        _population: f64,
+        final_multiplier: f64,
+    ) {
         let (sigma_per_day, gamma_per_day, omega_per_day) =
             (self.sigma_per_day, self.gamma_per_day, self.omega_per_day);
         let r0 = metrics.basic_reproduction_number;
@@ -226,8 +233,9 @@ impl Model<5> for SeirsParameters {
         // E* : I* : R* = gamma/sigma : 1 : gamma/omega. Written with omega in the
         // numerator, so that omega = 0 gives 0 without dividing by zero. With
         // nobody exposed or infected at the start the infection can never take hold.
+        // R0 is scaled by the multiplier the run ends under.
         metrics.endemic_prevalence = Some(if initial.exposed + initial.infected > 0.0 {
-            herd_immunity_threshold(r0) * omega_per_day
+            herd_immunity_threshold(r0 * final_multiplier) * omega_per_day
                 / (omega_per_day + gamma_per_day + gamma_per_day * omega_per_day / sigma_per_day)
         } else {
             0.0

@@ -155,12 +155,12 @@ impl Model<4> for SirsParameters {
         self.gamma_per_day
     }
 
-    fn fastest_rate(&self) -> f64 {
+    fn fastest_rate(&self, beta_per_day: f64) -> f64 {
         // The sum of all three rates. max(beta + gamma, omega) is enough for
         // stability but accepts steps that leave a quarter of the population
         // wrong when omega is close to beta + gamma. Measured; see
         // `tests/stability_evidence_tests.rs`.
-        self.beta_per_day + self.gamma_per_day + self.omega_per_day
+        beta_per_day + self.gamma_per_day + self.omega_per_day
     }
 
     fn to_array(state: &SirState) -> [f64; 4] {
@@ -177,11 +177,12 @@ impl Model<4> for SirsParameters {
 
     fn derivative(
         &self,
+        beta_per_day: f64,
         population: f64,
         [susceptible, infected, recovered, _]: [f64; 4],
     ) -> [f64; 4] {
         // Dividing first avoids multiplying two large population values.
-        let infection_flow = self.beta_per_day * (susceptible / population) * infected;
+        let infection_flow = beta_per_day * (susceptible / population) * infected;
         let recovery_flow = self.gamma_per_day * infected;
         let waning_flow = self.omega_per_day * recovered;
         [
@@ -196,7 +197,13 @@ impl Model<4> for SirsParameters {
         state.infected
     }
 
-    fn model_metrics(&self, metrics: &mut EpidemicMetrics, initial: &SirState, _population: f64) {
+    fn model_metrics(
+        &self,
+        metrics: &mut EpidemicMetrics,
+        initial: &SirState,
+        _population: f64,
+        final_multiplier: f64,
+    ) {
         let (gamma_per_day, omega_per_day) = (self.gamma_per_day, self.omega_per_day);
         let r0 = metrics.basic_reproduction_number;
         metrics.herd_immunity_threshold = Some(herd_immunity_threshold(r0));
@@ -204,9 +211,11 @@ impl Model<4> for SirsParameters {
         // with R* = N - S* - I*, which gives
         // I* / N = (1 - 1/R0) * omega / (omega + gamma). Without waning
         // (omega = 0) the infection still dies out, so the prevalence is 0, and
-        // with nobody infected at the start it can never take hold.
+        // with nobody infected at the start it can never take hold. R0 is scaled
+        // by the multiplier the run ends under.
         metrics.endemic_prevalence = Some(if initial.infected > 0.0 {
-            herd_immunity_threshold(r0) * omega_per_day / (omega_per_day + gamma_per_day)
+            herd_immunity_threshold(r0 * final_multiplier) * omega_per_day
+                / (omega_per_day + gamma_per_day)
         } else {
             0.0
         });

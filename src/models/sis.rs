@@ -166,13 +166,13 @@ impl Model<3> for SisParameters {
         self.gamma_per_day
     }
 
-    fn fastest_rate(&self) -> f64 {
+    fn fastest_rate(&self, beta_per_day: f64) -> f64 {
         // beta + gamma is the decay rate of a small departure from the state with
         // everyone infected. The 1.25 * gamma floor keeps gamma * step at most
         // 1.6: with little transmission and many infected, a larger step makes
         // the RK4 increment of the cumulative infections negative. Both were
         // measured; see `tests/stability_evidence_tests.rs`.
-        (self.beta_per_day + self.gamma_per_day).max(1.25 * self.gamma_per_day)
+        (beta_per_day + self.gamma_per_day).max(1.25 * self.gamma_per_day)
     }
 
     fn to_array(state: &SisState) -> [f64; 3] {
@@ -186,9 +186,14 @@ impl Model<3> for SisParameters {
         }
     }
 
-    fn derivative(&self, population: f64, [susceptible, infected, _]: [f64; 3]) -> [f64; 3] {
+    fn derivative(
+        &self,
+        beta_per_day: f64,
+        population: f64,
+        [susceptible, infected, _]: [f64; 3],
+    ) -> [f64; 3] {
         // Dividing first avoids multiplying two large population values.
-        let infection_flow = self.beta_per_day * (susceptible / population) * infected;
+        let infection_flow = beta_per_day * (susceptible / population) * infected;
         let recovery_flow = self.gamma_per_day * infected;
         [
             recovery_flow - infection_flow,
@@ -201,11 +206,18 @@ impl Model<3> for SisParameters {
         state.infected
     }
 
-    fn model_metrics(&self, metrics: &mut EpidemicMetrics, initial: &SisState, _population: f64) {
-        // At the endemic equilibrium S* = N / R0, so I* / N = 1 - 1/R0. With
-        // nobody infected at the start the infection can never take hold.
+    fn model_metrics(
+        &self,
+        metrics: &mut EpidemicMetrics,
+        initial: &SisState,
+        _population: f64,
+        final_multiplier: f64,
+    ) {
+        // At the endemic equilibrium S* = N / R0, so I* / N = 1 - 1/R0, with R0
+        // scaled by the multiplier the run ends under. With nobody infected at
+        // the start the infection can never take hold.
         metrics.endemic_prevalence = Some(if initial.infected > 0.0 {
-            herd_immunity_threshold(metrics.basic_reproduction_number)
+            herd_immunity_threshold(metrics.basic_reproduction_number * final_multiplier)
         } else {
             0.0
         });

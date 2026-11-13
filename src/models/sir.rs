@@ -210,10 +210,10 @@ impl Model<4> for SirParameters {
         self.gamma_per_day
     }
 
-    fn fastest_rate(&self) -> f64 {
+    fn fastest_rate(&self, beta_per_day: f64) -> f64 {
         // Susceptibles empty at up to beta per day and infected at gamma per
         // day; no state of the model decays faster than the larger of the two.
-        self.beta_per_day.max(self.gamma_per_day)
+        beta_per_day.max(self.gamma_per_day)
     }
 
     fn to_array(state: &SirState) -> [f64; 4] {
@@ -228,9 +228,14 @@ impl Model<4> for SirParameters {
         }
     }
 
-    fn derivative(&self, population: f64, [susceptible, infected, _, _]: [f64; 4]) -> [f64; 4] {
+    fn derivative(
+        &self,
+        beta_per_day: f64,
+        population: f64,
+        [susceptible, infected, _, _]: [f64; 4],
+    ) -> [f64; 4] {
         // Dividing first avoids multiplying two large population values.
-        let infection_flow = self.beta_per_day * (susceptible / population) * infected;
+        let infection_flow = beta_per_day * (susceptible / population) * infected;
         let recovery_flow = self.gamma_per_day * infected;
         [
             -infection_flow,
@@ -244,7 +249,13 @@ impl Model<4> for SirParameters {
         state.infected
     }
 
-    fn model_metrics(&self, metrics: &mut EpidemicMetrics, initial: &SirState, population: f64) {
+    fn model_metrics(
+        &self,
+        metrics: &mut EpidemicMetrics,
+        initial: &SirState,
+        population: f64,
+        _final_multiplier: f64,
+    ) {
         let r0 = metrics.basic_reproduction_number;
         metrics.herd_immunity_threshold = Some(herd_immunity_threshold(r0));
         metrics.final_size_fraction = Some(final_size_fraction(
@@ -394,7 +405,7 @@ mod tests {
                     .unwrap()
                     .with_record_every(record_every)
                     .unwrap();
-                let run = simulate_sir(parameters, VALID_STATE, settings).unwrap();
+                let run = simulate_sir(parameters, VALID_STATE, settings.clone()).unwrap();
                 let half = simulate_sir(parameters, VALID_STATE, settings.halved()).unwrap();
                 let times = |result: &SimulationResult<SirState>| -> Vec<f64> {
                     result.trajectory.iter().map(|o| o.time_days).collect()

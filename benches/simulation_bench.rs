@@ -38,10 +38,11 @@ fn bench_sir(criterion: &mut Criterion) {
     group.sample_size(10);
     for (steps, step_days) in WORKLOADS {
         let settings = settings(steps, step_days);
-        let result = simulate_sir(parameters, initial, settings).unwrap();
+        let result = simulate_sir(parameters, initial, settings.clone()).unwrap();
         assert_eq!(result.diagnostics.steps_executed, steps);
         group.bench_function(BenchmarkId::from_parameter(steps), |bencher| {
-            bencher.iter(|| simulate_sir(black_box(parameters), black_box(initial), settings))
+            bencher
+                .iter(|| simulate_sir(black_box(parameters), black_box(initial), settings.clone()))
         });
     }
     group.finish();
@@ -63,10 +64,11 @@ fn bench_seir(criterion: &mut Criterion) {
     group.sample_size(10);
     for (steps, step_days) in WORKLOADS {
         let settings = settings(steps, step_days);
-        let result = simulate_seir(parameters, initial, settings).unwrap();
+        let result = simulate_seir(parameters, initial, settings.clone()).unwrap();
         assert_eq!(result.diagnostics.steps_executed, steps);
         group.bench_function(BenchmarkId::from_parameter(steps), |bencher| {
-            bencher.iter(|| simulate_seir(black_box(parameters), black_box(initial), settings))
+            bencher
+                .iter(|| simulate_seir(black_box(parameters), black_box(initial), settings.clone()))
         });
     }
     group.finish();

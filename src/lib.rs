@@ -35,6 +35,7 @@ mod error;
 mod metrics;
 mod models;
 mod result;
+mod schedule;
 mod settings;
 mod simulation;
 mod solver;
@@ -49,6 +50,7 @@ pub use models::sir::{SirParameters, SirState, estimate_sir_step_error, simulate
 pub use models::sirs::{SirsParameters, estimate_sirs_step_error, simulate_sirs};
 pub use models::sis::{SisParameters, SisState, estimate_sis_step_error, simulate_sis};
 pub use result::{Observation, SimulationDiagnostics, SimulationResult};
+pub use schedule::TransmissionSchedule;
 pub use settings::SimulationSettings;
 
 // Runs the Rust examples in the Markdown documentation as doctests.

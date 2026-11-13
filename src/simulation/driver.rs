@@ -17,8 +17,10 @@ pub(crate) struct SimulationOutput<S> {
 /// recording the initial state, the state after every `record_every`-th
 /// accepted step, and the final state.
 ///
-/// The last entry of the state is the cumulative infection count `C`, which
-/// the derivative integrates as `dC/dt = beta * S * I / N`. The entries
+/// The derivative receives the transmission multiplier for the step, from
+/// the settings' schedule (1 without one), and the state. The last entry of
+/// the state is the cumulative infection count `C`, which the derivative
+/// integrates as `dC/dt = beta * S * I / N`. The entries
 /// before it are the compartments, named by `compartment_names`. `C` is
 /// recorded in each [`Observation`] and is not part of the population.
 ///
@@ -34,7 +36,7 @@ pub(crate) fn run_simulation<const N: usize, S, D, C>(
     compartment_names: &[&'static str],
 ) -> Result<SimulationOutput<S>, SimulationError>
 where
-    D: Fn([f64; N]) -> [f64; N],
+    D: Fn(f64, [f64; N]) -> [f64; N],
     C: Fn([f64; N]) -> S,
 {
     assert_eq!(compartment_names.len() + 1, N, "one name per compartment");
@@ -71,7 +73,12 @@ where
     )?;
     trajectory.push(observe(time, state));
     for index in 1..=required_steps {
-        state = rk4_step(state, step.min(duration - time), &derivative)?;
+        // The schedule's changes lie on the step grid, so one multiplier holds
+        // for the whole step and RK4 keeps its order.
+        let multiplier = settings.multiplier_for_step(index - 1);
+        state = rk4_step(state, step.min(duration - time), |values| {
+            derivative(multiplier, values)
+        })?;
         // Times come from the step index, not from repeated addition, so
         // rounding does not accumulate; the last one is the duration itself.
         time = if index == required_steps {
@@ -189,7 +196,7 @@ mod tests {
             [initial[0], initial[1], 0.0],
             population,
             settings,
-            |[a, b, _]| {
+            |_, [a, b, _]| {
                 let [da, db] = derivative([a, b]);
                 [da, db, 0.0]
             },
@@ -228,7 +235,7 @@ mod tests {
             [100.0, 0.0, 0.0],
             100.0,
             settings(10.0, 1.0),
-            |_| [-1.0, 1.0, 5.0],
+            |_, _| [-1.0, 1.0, 5.0],
             |[a, b, _]| [a, b],
             &["a", "b"],
         )
@@ -347,7 +354,7 @@ mod tests {
             [100.0, 0.0, 0.0],
             200.0,
             settings(10.0, 1.0),
-            |_| [-1.0, 1.0, 0.0],
+            |_, _| [-1.0, 1.0, 0.0],
             |[a, b, _]| [a, b],
             &["a", "b"],
         );

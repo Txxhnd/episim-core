@@ -27,6 +27,16 @@ pub enum SimulationError {
     InvalidMaximumSteps,
     /// The recording interval is zero.
     InvalidRecordInterval,
+    /// A transmission schedule has a day that is not finite and positive, days
+    /// that do not strictly increase, or a multiplier that is not finite and
+    /// non-negative.
+    InvalidSchedule,
+    /// A transmission schedule changes on a day that is not a whole number of
+    /// steps.
+    ScheduleChangeOffStepGrid {
+        /// The first change day that is off the step grid.
+        day: f64,
+    },
     /// The simulation requires more integration steps than the configured maximum.
     StepLimitExceeded,
     /// The timestep is too small to advance the floating-point simulation clock.
@@ -79,6 +89,14 @@ impl fmt::Display for SimulationError {
             Self::InvalidRecordInterval => {
                 f.write_str("recording interval must be greater than zero")
             }
+            Self::InvalidSchedule => f.write_str(
+                "transmission schedule days must be finite, positive and increasing, \
+                 and multipliers finite and non-negative",
+            ),
+            Self::ScheduleChangeOffStepGrid { day } => write!(
+                f,
+                "transmission schedule change on day {day} is not a whole number of steps"
+            ),
             Self::StepLimitExceeded => {
                 f.write_str("required integration steps exceed the configured maximum")
             }

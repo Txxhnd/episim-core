@@ -18,7 +18,7 @@ fn main() -> Result<(), SimulationError> {
     };
     let settings = SimulationSettings::new(160.0, 0.25)?;
 
-    let result = simulate_seir(parameters, initial_state, settings)?;
+    let result = simulate_seir(parameters, initial_state, settings.clone())?;
     let metrics = result.metrics;
     let diagnostics = result.diagnostics;
 

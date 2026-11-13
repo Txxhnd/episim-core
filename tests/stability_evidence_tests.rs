@@ -22,8 +22,9 @@
 //! final compartment, as a fraction of `N`, misses the fine run by more than
 //! 0.1.
 //!
-//! The measurement is ignored by default because it needs a release build to
-//! finish in about three minutes. `docs/numerical_methods.md` quotes its result.
+//! The measurement is ignored by default because it needs a release build:
+//! about four minutes for both tests together. `docs/numerical_methods.md`
+//! quotes its result.
 //! The workflow `.github/workflows/stability-evidence.yml` runs it every
 //! Monday and on demand.
 //!
@@ -31,14 +32,17 @@
 //! cargo test --release --test stability_evidence_tests -- --ignored --nocapture
 //! ```
 //!
+//! A second ignored test, `stability_evidence_with_schedules`, repeats the
+//! measurement for runs with a transmission schedule; see its comment.
+//!
 //! A smaller sample is not kept in the normal suite: with 500 configurations
 //! it could not detect either a loosened limit or a missing coupled SEIR rate,
 //! while this one detects both.
 
 use episim_core::{
-    Observation, SeirParameters, SeirState, SeirsParameters, SimulationSettings, SirParameters,
-    SirState, SirsParameters, SisParameters, SisState, simulate_seir, simulate_seirs, simulate_sir,
-    simulate_sirs, simulate_sis,
+    Observation, SeirParameters, SeirState, SeirsParameters, SimulationError, SimulationSettings,
+    SirParameters, SirState, SirsParameters, SisParameters, SisState, TransmissionSchedule,
+    simulate_seir, simulate_seirs, simulate_sir, simulate_sirs, simulate_sis,
 };
 
 const POPULATION: f64 = 1000.0;
@@ -149,8 +153,8 @@ fn gather(configurations: u32) -> Evidence {
             recovered: POPULATION * c / total,
         };
         if let (Ok(run), Ok(reference)) = (
-            simulate_sir(parameters, initial, coarse),
-            simulate_sir(parameters, initial, fine),
+            simulate_sir(parameters, initial, coarse.clone()),
+            simulate_sir(parameters, initial, fine.clone()),
         ) {
             evidence.accepted_sir += 1;
             let wrong_direction = run.trajectory.windows(2).any(|pair| {
@@ -185,8 +189,8 @@ fn gather(configurations: u32) -> Evidence {
             recovered: POPULATION * c / total,
         };
         if let (Ok(run), Ok(reference)) = (
-            simulate_seir(parameters, initial, coarse),
-            simulate_seir(parameters, initial, fine),
+            simulate_seir(parameters, initial, coarse.clone()),
+            simulate_seir(parameters, initial, fine.clone()),
         ) {
             evidence.accepted_seir += 1;
             let wrong_direction = run.trajectory.windows(2).any(|pair| {
@@ -219,8 +223,8 @@ fn gather(configurations: u32) -> Evidence {
             infected: POPULATION * b / (a + b),
         };
         if let (Ok(run), Ok(reference)) = (
-            simulate_sis(parameters, initial, coarse),
-            simulate_sis(parameters, initial, fine),
+            simulate_sis(parameters, initial, coarse.clone()),
+            simulate_sis(parameters, initial, fine.clone()),
         ) {
             evidence.accepted_sis += 1;
             let equilibrium = run.metrics.endemic_prevalence.unwrap() * POPULATION;
@@ -263,8 +267,8 @@ fn gather(configurations: u32) -> Evidence {
             recovered: POPULATION * c / total,
         };
         if let (Ok(run), Ok(reference)) = (
-            simulate_sirs(parameters, initial, coarse),
-            simulate_sirs(parameters, initial, fine),
+            simulate_sirs(parameters, initial, coarse.clone()),
+            simulate_sirs(parameters, initial, fine.clone()),
         ) {
             evidence.accepted_sirs += 1;
             let wrong_direction = run.trajectory.windows(2).any(|pair| {
@@ -307,8 +311,8 @@ fn gather(configurations: u32) -> Evidence {
             recovered: POPULATION * c / total,
         };
         if let (Ok(run), Ok(reference)) = (
-            simulate_seirs(parameters, initial, coarse),
-            simulate_seirs(parameters, initial, fine),
+            simulate_seirs(parameters, initial, coarse.clone()),
+            simulate_seirs(parameters, initial, fine.clone()),
         ) {
             evidence.accepted_seirs += 1;
             let wrong_direction = run.trajectory.windows(2).any(|pair| {
@@ -341,7 +345,7 @@ fn gather(configurations: u32) -> Evidence {
 }
 
 #[test]
-#[ignore = "about three minutes in release mode; run with --release -- --ignored --nocapture"]
+#[ignore = "minutes in release mode; run with --release -- --ignored --nocapture"]
 fn full_stability_evidence() {
     let evidence = gather(250_000);
     println!(
@@ -377,6 +381,250 @@ fn full_stability_evidence() {
         evidence.accepted_seirs >= 6_000,
         "{}",
         evidence.accepted_seirs
+    );
+    assert!(evidence.flagged.is_empty(), "{:#?}", evidence.flagged);
+}
+
+/// Whether a scheduled run goes wrong: over some step, an entry moves against
+/// the exact flow from the same state, or a final entry misses the fine run
+/// by more than 0.1 N. Every step lies in one segment of the schedule, so the
+/// exact flow over it is a constant-parameter run at that step's multiplier,
+/// `local(state, multiplier, step)`, with 64 substeps.
+fn scheduled_run_flagged<S: Copy, const K: usize>(
+    run: &[Observation<S>],
+    fine_last: &Observation<S>,
+    schedule: &TransmissionSchedule,
+    entries: fn(&Observation<S>) -> [f64; K],
+    local: impl Fn(S, f64, f64) -> Result<Vec<Observation<S>>, SimulationError>,
+) -> bool {
+    let wrong_direction = run.windows(2).any(|pair| {
+        let step = pair[1].time_days - pair[0].time_days;
+        let multiplier = schedule.multiplier_at(pair[0].time_days);
+        // A start with a tolerated negative value is not a valid state.
+        let Ok(exact) = local(pair[0].state, multiplier, step) else {
+            return false;
+        };
+        let exact: Vec<_> = exact.iter().map(entries).collect();
+        against_exact_flow(entries(&pair[0]), entries(&pair[1]), &exact)
+    });
+    let (last, reference) = (entries(run.last().unwrap()), entries(fine_last));
+    // The last entry is the cumulative infections, so this covers the incidence.
+    let final_error = (0..K)
+        .map(|entry| (last[entry] - reference[entry]).abs() / POPULATION)
+        .fold(0.0, f64::max);
+    wrong_direction || final_error > MAX_INCIDENCE_ERROR
+}
+
+/// SIS compartments and cumulative infections of an observation.
+fn sis_entries(observation: &Observation<SisState>) -> [f64; 3] {
+    let state = observation.state;
+    [
+        state.susceptible,
+        state.infected,
+        observation.cumulative_infections,
+    ]
+}
+
+/// Runs a model coarse and fine with `$schedule`, counts the run as accepted
+/// when both succeed, and records it as flagged per `scheduled_run_flagged`.
+/// `$scaled` builds the model's parameters with beta multiplied by its argument.
+macro_rules! scheduled_row {
+    ($evidence:expr, $index:expr, $label:expr, $simulate:ident, $initial:expr, $scaled:expr,
+     $schedule:expr, $duration:expr, $entries:expr) => {{
+        let with = |step: f64| {
+            SimulationSettings::new($duration, step)
+                .unwrap()
+                .with_transmission_schedule($schedule.clone())
+                .unwrap()
+        };
+        if let (Ok(run), Ok(reference)) = (
+            $simulate($scaled(1.0), $initial, with(1.0)),
+            $simulate($scaled(1.0), $initial, with(1.0 / 64.0)),
+        ) {
+            $evidence.accepted[$index] += 1;
+            let local = |state, multiplier: f64, step: f64| {
+                $simulate(
+                    $scaled(multiplier),
+                    state,
+                    SimulationSettings::new(step, step / 64.0).unwrap(),
+                )
+                .map(|result| result.trajectory)
+            };
+            if scheduled_run_flagged(
+                &run.trajectory,
+                reference.trajectory.last().unwrap(),
+                &$schedule,
+                $entries,
+                local,
+            ) {
+                $evidence.flagged.push(format!(
+                    "{} {:?} {:?} duration {}",
+                    $label,
+                    $scaled(1.0),
+                    $schedule,
+                    $duration
+                ));
+            }
+        }
+    }};
+}
+
+#[derive(Debug, Default)]
+struct ScheduledEvidence {
+    /// Accepted runs of SIR, SEIR, SIS, SIRS and SEIRS, in that order.
+    accepted: [u32; 5],
+    flagged: Vec<String>,
+}
+
+/// As `gather`, for runs with a transmission schedule. The configurations
+/// repeat `gather`'s draws (generators 42 and 7), and a third generator
+/// (seed 11) adds a three-segment schedule: changes on whole days, so on the
+/// one-day and 1/64-day grids, and multipliers in `[0, 2)`. The stability
+/// limit must then hold for the largest beta in force.
+fn gather_scheduled(configurations: u32) -> ScheduledEvidence {
+    let mut generator = Generator(42);
+    let mut omega_generator = Generator(7);
+    let mut schedule_generator = Generator(11);
+    let mut evidence = ScheduledEvidence::default();
+    for _ in 0..configurations {
+        let beta = generator.unit() * 2.1;
+        let sigma = (generator.unit() * 2.1).max(1e-3);
+        let gamma = (generator.unit() * 2.1).max(1e-3);
+        let mut duration = 2.0 + (generator.unit() * 40.0).floor();
+        if generator.unit() < 0.3 {
+            duration += generator.unit();
+        }
+        let (a, b, c, d) = (
+            generator.unit(),
+            generator.unit(),
+            generator.unit() * 0.2,
+            generator.unit(),
+        );
+        let omega = (omega_generator.unit() * 2.1).max(1e-3);
+        let first_change = 1.0 + (schedule_generator.unit() * (duration - 1.0)).floor();
+        let second_change = first_change + 1.0 + (schedule_generator.unit() * 40.0).floor();
+        let schedule = TransmissionSchedule::new(&[
+            (first_change, schedule_generator.unit() * 2.0),
+            (second_change, schedule_generator.unit() * 2.0),
+        ])
+        .unwrap();
+
+        let total = a + b + c;
+        let sir0 = SirState {
+            susceptible: POPULATION * a / total,
+            infected: POPULATION * b / total,
+            recovered: POPULATION * c / total,
+        };
+        let total = a + b + c + d;
+        let seir0 = SeirState {
+            susceptible: POPULATION * a / total,
+            exposed: POPULATION * d / total,
+            infected: POPULATION * b / total,
+            recovered: POPULATION * c / total,
+        };
+        let sis0 = SisState {
+            susceptible: POPULATION * a / (a + b),
+            infected: POPULATION * b / (a + b),
+        };
+
+        let sir = |m: f64| SirParameters {
+            beta_per_day: beta * m,
+            gamma_per_day: gamma,
+        };
+        scheduled_row!(
+            evidence,
+            0,
+            "SIR",
+            simulate_sir,
+            sir0,
+            sir,
+            schedule,
+            duration,
+            sir_entries
+        );
+        let seir = |m: f64| SeirParameters {
+            beta_per_day: beta * m,
+            sigma_per_day: sigma,
+            gamma_per_day: gamma,
+        };
+        scheduled_row!(
+            evidence,
+            1,
+            "SEIR",
+            simulate_seir,
+            seir0,
+            seir,
+            schedule,
+            duration,
+            seir_entries
+        );
+        let sis = |m: f64| SisParameters {
+            beta_per_day: beta * m,
+            gamma_per_day: gamma,
+        };
+        scheduled_row!(
+            evidence,
+            2,
+            "SIS",
+            simulate_sis,
+            sis0,
+            sis,
+            schedule,
+            duration,
+            sis_entries
+        );
+        let sirs = |m: f64| SirsParameters {
+            beta_per_day: beta * m,
+            gamma_per_day: gamma,
+            omega_per_day: omega,
+        };
+        scheduled_row!(
+            evidence,
+            3,
+            "SIRS",
+            simulate_sirs,
+            sir0,
+            sirs,
+            schedule,
+            duration,
+            sir_entries
+        );
+        let seirs = |m: f64| SeirsParameters {
+            beta_per_day: beta * m,
+            sigma_per_day: sigma,
+            gamma_per_day: gamma,
+            omega_per_day: omega,
+        };
+        scheduled_row!(
+            evidence,
+            4,
+            "SEIRS",
+            simulate_seirs,
+            seir0,
+            seirs,
+            schedule,
+            duration,
+            seir_entries
+        );
+    }
+    evidence
+}
+
+#[test]
+#[ignore = "minutes in release mode; run with --release -- --ignored --nocapture"]
+fn stability_evidence_with_schedules() {
+    let evidence = gather_scheduled(250_000);
+    let [sir, seir, sis, sirs, seirs] = evidence.accepted;
+    println!(
+        "with schedules: accepted SIR runs: {sir}, accepted SEIR runs: {seir}, \
+         accepted SIS runs: {sis}, accepted SIRS runs: {sirs}, \
+         accepted SEIRS runs: {seirs}, flagged: {}",
+        evidence.flagged.len()
+    );
+    // Enough accepted runs per model that a pass means something.
+    assert!(
+        evidence.accepted.iter().all(|&count| count >= 5_000),
+        "{evidence:?}"
     );
     assert!(evidence.flagged.is_empty(), "{:#?}", evidence.flagged);
 }

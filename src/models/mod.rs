@@ -32,19 +32,27 @@ pub(crate) trait Model<const N: usize> {
     fn beta(&self) -> f64;
     /// Recovery rate in inverse days.
     fn gamma(&self) -> f64;
-    /// Fastest rate at which any state of the model can decay; sets the
-    /// stability limit.
-    fn fastest_rate(&self) -> f64;
+    /// Fastest rate at which any state of the model can decay when the
+    /// transmission rate is `beta`; sets the stability limit.
+    fn fastest_rate(&self, beta: f64) -> f64;
     /// The compartments of `state` followed by a cumulative infection count of 0.
     fn to_array(state: &Self::State) -> [f64; N];
     /// The state held in the compartments of `values`.
     fn from_array(values: [f64; N]) -> Self::State;
-    /// Derivative of the compartments and of the cumulative infections.
-    fn derivative(&self, population: f64, values: [f64; N]) -> [f64; N];
+    /// Derivative of the compartments and of the cumulative infections when
+    /// the transmission rate is `beta`.
+    fn derivative(&self, beta: f64, population: f64, values: [f64; N]) -> [f64; N];
     /// The infectious compartment, for the peak metrics.
     fn infectious(state: &Self::State) -> f64;
-    /// Fills in the metrics that only some models report.
-    fn model_metrics(&self, metrics: &mut EpidemicMetrics, initial: &Self::State, population: f64);
+    /// Fills in the metrics that only some models report. `final_multiplier`
+    /// is the transmission multiplier in force at the end of the run.
+    fn model_metrics(
+        &self,
+        metrics: &mut EpidemicMetrics,
+        initial: &Self::State,
+        population: f64,
+        final_multiplier: f64,
+    );
 }
 
 /// Validates the inputs, applies the stability limit, integrates, and
@@ -57,18 +65,22 @@ pub(crate) fn simulate<const N: usize, M: Model<N>>(
     model.validate()?;
     let population = M::population(&initial_state)?;
     // A duration shorter than the step is integrated in one shorter step.
+    // Each step lies in one segment of the schedule, so the limit must hold
+    // for the largest transmission rate in force during the run.
     validation::stable_step(
         settings.step_days().min(settings.duration_days()),
-        model.fastest_rate(),
+        model.fastest_rate(model.beta() * settings.largest_multiplier()),
     )?;
     // Checked now so that an unusable R0 is reported before any integration.
     basic_reproduction_number(model.beta(), model.gamma())?;
 
+    let final_multiplier = settings.final_multiplier();
+    let varies_transmission = settings.varies_transmission();
     let output = run_simulation(
         M::to_array(&initial_state),
         population,
         settings,
-        |values| model.derivative(population, values),
+        |multiplier, values| model.derivative(model.beta() * multiplier, population, values),
         M::from_array,
         M::COMPARTMENTS,
     )?;
@@ -79,7 +91,11 @@ pub(crate) fn simulate<const N: usize, M: Model<N>>(
         model.gamma(),
         M::infectious,
     )?;
-    model.model_metrics(&mut metrics, &initial_state, population);
+    model.model_metrics(&mut metrics, &initial_state, population, final_multiplier);
+    // The final size equation assumes a constant transmission rate.
+    if varies_transmission {
+        metrics.final_size_fraction = None;
+    }
     Ok(SimulationResult {
         trajectory: output.trajectory,
         metrics,
@@ -94,8 +110,9 @@ pub(crate) fn estimate<const N: usize, M: Model<N>>(
     initial_state: M::State,
     settings: SimulationSettings,
 ) -> Result<StepErrorEstimate, SimulationError> {
+    let half_step_settings = settings.halved();
     let run = simulate(model, initial_state, settings)?;
-    let half_step_run = simulate(model, initial_state, settings.halved())?;
+    let half_step_run = simulate(model, initial_state, half_step_settings)?;
     // The last array entry is the cumulative infection count, 0 in every
     // converted state; the comparison reads the recorded count separately.
     Ok(estimate_step_error(

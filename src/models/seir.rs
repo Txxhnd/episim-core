@@ -221,9 +221,8 @@ impl Model<5> for SeirParameters {
         self.gamma_per_day
     }
 
-    fn fastest_rate(&self) -> f64 {
-        let (beta_per_day, sigma_per_day, gamma_per_day) =
-            (self.beta_per_day, self.sigma_per_day, self.gamma_per_day);
+    fn fastest_rate(&self, beta_per_day: f64) -> f64 {
+        let (sigma_per_day, gamma_per_day) = (self.sigma_per_day, self.gamma_per_day);
         // Exposed and infected feed each other (E -> I by progression, I -> E by
         // transmission), so together they decay faster than sigma or gamma alone.
         // This is the fast eigenvalue of that pair in a fully susceptible
@@ -256,11 +255,12 @@ impl Model<5> for SeirParameters {
 
     fn derivative(
         &self,
+        beta_per_day: f64,
         population: f64,
         [susceptible, exposed, infected, _, _]: [f64; 5],
     ) -> [f64; 5] {
         // Dividing first avoids multiplying two large population values.
-        let infection_flow = self.beta_per_day * (susceptible / population) * infected;
+        let infection_flow = beta_per_day * (susceptible / population) * infected;
         let progression_flow = self.sigma_per_day * exposed;
         let recovery_flow = self.gamma_per_day * infected;
         [
@@ -276,7 +276,13 @@ impl Model<5> for SeirParameters {
         state.infected
     }
 
-    fn model_metrics(&self, metrics: &mut EpidemicMetrics, initial: &SeirState, population: f64) {
+    fn model_metrics(
+        &self,
+        metrics: &mut EpidemicMetrics,
+        initial: &SeirState,
+        population: f64,
+        _final_multiplier: f64,
+    ) {
         let r0 = metrics.basic_reproduction_number;
         metrics.herd_immunity_threshold = Some(herd_immunity_threshold(r0));
         metrics.final_size_fraction = Some(final_size_fraction(
