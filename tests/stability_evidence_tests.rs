@@ -1,7 +1,7 @@
 //! Evidence for the timestep stability limit.
 //!
-//! `simulate_sir`, `simulate_seir` and `simulate_sis` reject a run when the
-//! model's fastest decay rate times the step exceeds 2. That limit was chosen from
+//! Every `simulate_*` function rejects a run when the model's fastest decay
+//! rate times the step exceeds 2. That limit was chosen from
 //! measurement, not derived, so this file keeps the measurement runnable.
 //! It draws random configurations, runs each one at a step of one day and
 //! again at 1/64 day, and counts accepted runs whose coarse result is
@@ -12,6 +12,15 @@
 //! equilibrium `I*` and never crosses it, and the cumulative infections never
 //! fall. A run is flagged if it breaks either property, or if its incidence
 //! or final infected fraction misses the fine run by more than 0.1.
+//!
+//! The SIRS rows also reuse the SIR draws, and take `omega` from a second
+//! generator. No compartment of SIRS is monotone everywhere, so a run is
+//! flagged if, over some coarse step, a compartment or the cumulative
+//! infections move against the exact flow from the same starting state,
+//! where that flow is monotone over the step. The exact flow is a run of 64
+//! substeps from that state. A run is also flagged if its incidence or any
+//! final compartment, as a fraction of `N`, misses the fine run by more than
+//! 0.1.
 //!
 //! The measurement is ignored by default because it needs a release build to
 //! finish in about a minute. `docs/numerical_methods.md` quotes its result.
@@ -25,8 +34,9 @@
 //! while this one detects both.
 
 use episim_core::{
-    SeirParameters, SeirState, SimulationSettings, SirParameters, SirState, SisParameters,
-    SisState, simulate_seir, simulate_sir, simulate_sis,
+    Observation, SeirParameters, SeirState, SimulationSettings, SirParameters, SirState,
+    SirsParameters, SisParameters, SisState, simulate_seir, simulate_sir, simulate_sirs,
+    simulate_sis,
 };
 
 const POPULATION: f64 = 1000.0;
@@ -55,13 +65,42 @@ struct Evidence {
     accepted_sir: u32,
     accepted_seir: u32,
     accepted_sis: u32,
+    accepted_sirs: u32,
     /// One line per accepted run that is qualitatively wrong.
     flagged: Vec<String>,
+}
+
+/// Whether some entry moved from `before` to `after` against the exact flow
+/// from `before`, over a step on which that flow is monotone.
+fn against_exact_flow<const N: usize>(
+    before: [f64; N],
+    after: [f64; N],
+    exact: &[[f64; N]],
+) -> bool {
+    (0..N).any(|entry| {
+        let rising = exact.windows(2).all(|pair| pair[1][entry] > pair[0][entry]);
+        let falling = exact.windows(2).all(|pair| pair[1][entry] < pair[0][entry]);
+        let change = after[entry] - before[entry];
+        (rising && change < -TOLERANCE) || (falling && change > TOLERANCE)
+    })
+}
+
+/// SIR compartments and cumulative infections of an observation.
+fn sir_entries(observation: &Observation<SirState>) -> [f64; 4] {
+    let state = observation.state;
+    [
+        state.susceptible,
+        state.infected,
+        state.recovered,
+        observation.cumulative_infections,
+    ]
 }
 
 /// Runs `configurations` random cases of each model and collects the evidence.
 fn gather(configurations: u32) -> Evidence {
     let mut generator = Generator(42);
+    // A second generator, so that adding waning immunity changed no other draw.
+    let mut omega_generator = Generator(7);
     let mut evidence = Evidence::default();
     for _ in 0..configurations {
         // Rates up to 2.1 per day with a one-day step reach well past the
@@ -80,6 +119,7 @@ fn gather(configurations: u32) -> Evidence {
             generator.unit() * 0.2,
             generator.unit(),
         );
+        let omega = (omega_generator.unit() * 2.1).max(1e-3);
         let coarse = SimulationSettings::new(duration, 1.0).unwrap();
         let fine = SimulationSettings::new(duration, 1.0 / 64.0).unwrap();
 
@@ -195,6 +235,48 @@ fn gather(configurations: u32) -> Evidence {
                 ));
             }
         }
+
+        let parameters = SirsParameters {
+            beta_per_day: beta,
+            gamma_per_day: gamma,
+            omega_per_day: omega,
+        };
+        let total = a + b + c;
+        let initial = SirState {
+            susceptible: POPULATION * a / total,
+            infected: POPULATION * b / total,
+            recovered: POPULATION * c / total,
+        };
+        if let (Ok(run), Ok(reference)) = (
+            simulate_sirs(parameters, initial, coarse),
+            simulate_sirs(parameters, initial, fine),
+        ) {
+            evidence.accepted_sirs += 1;
+            let wrong_direction = run.trajectory.windows(2).any(|pair| {
+                let step = pair[1].time_days - pair[0].time_days;
+                let local = SimulationSettings::new(step, step / 64.0).unwrap();
+                // A start with a tolerated negative value is not a valid state.
+                let Ok(exact) = simulate_sirs(parameters, pair[0].state, local) else {
+                    return false;
+                };
+                let exact: Vec<_> = exact.trajectory.iter().map(sir_entries).collect();
+                against_exact_flow(sir_entries(&pair[0]), sir_entries(&pair[1]), &exact)
+            });
+            let (last, fine_last) = (
+                sir_entries(run.trajectory.last().unwrap()),
+                sir_entries(reference.trajectory.last().unwrap()),
+            );
+            // The last entry is the cumulative infections, so this covers the incidence.
+            let final_error = (0..4)
+                .map(|entry| (last[entry] - fine_last[entry]).abs() / POPULATION)
+                .fold(0.0, f64::max);
+            if wrong_direction || final_error > MAX_INCIDENCE_ERROR {
+                evidence.flagged.push(format!(
+                    "SIRS {parameters:?} {initial:?} duration {duration}: \
+                     wrong direction {wrong_direction}, final error {final_error}"
+                ));
+            }
+        }
     }
     evidence
 }
@@ -204,10 +286,12 @@ fn gather(configurations: u32) -> Evidence {
 fn full_stability_evidence() {
     let evidence = gather(250_000);
     println!(
-        "accepted SIR runs: {}, accepted SEIR runs: {}, accepted SIS runs: {}, flagged: {}",
+        "accepted SIR runs: {}, accepted SEIR runs: {}, accepted SIS runs: {}, \
+         accepted SIRS runs: {}, flagged: {}",
         evidence.accepted_sir,
         evidence.accepted_seir,
         evidence.accepted_sis,
+        evidence.accepted_sirs,
         evidence.flagged.len()
     );
     assert!(
@@ -221,5 +305,10 @@ fn full_stability_evidence() {
         evidence.accepted_seir
     );
     assert!(evidence.accepted_sis >= 80_000, "{}", evidence.accepted_sis);
+    assert!(
+        evidence.accepted_sirs >= 80_000,
+        "{}",
+        evidence.accepted_sirs
+    );
     assert!(evidence.flagged.is_empty(), "{:#?}", evidence.flagged);
 }

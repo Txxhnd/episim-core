@@ -17,7 +17,10 @@ pub struct EpidemicMetrics {
     /// (dimensionless) for a fully susceptible population.
     pub basic_reproduction_number: f64,
     /// Fraction of the population that must be immune for the infected to
-    /// decline: `1 - 1/R0`, or 0 when `R0 <= 1`. `Some` for SIR and SEIR.
+    /// decline: `1 - 1/R0`, or 0 when `R0 <= 1`. `Some` for SIR, SEIR and
+    /// SIRS. With waning immunity (SIRS) it is the fraction that must be
+    /// non-susceptible at a given time for infections to decline at that
+    /// time; it is not maintained without continued infection or vaccination.
     pub herd_immunity_threshold: Option<f64>,
     /// Largest recorded infectious population, in individuals. Its precision
     /// is limited by the timestep because only recorded observations count.
@@ -44,7 +47,7 @@ pub struct EpidemicMetrics {
     /// Fraction of the population infected once the model settles at its
     /// endemic equilibrium, `I* / N`, or 0 when `R0 <= 1`. It follows from the
     /// parameters alone, like `basic_reproduction_number`. `Some` for models
-    /// in which people become susceptible again: SIS.
+    /// in which people become susceptible again: SIS and SIRS.
     pub endemic_prevalence: Option<f64>,
 }
 

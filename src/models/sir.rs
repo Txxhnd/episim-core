@@ -18,7 +18,8 @@ pub struct SirParameters {
     pub gamma_per_day: f64,
 }
 
-/// Population counts in each SIR compartment.
+/// Population counts in each SIR compartment, used by both [`simulate_sir`]
+/// and [`simulate_sirs`](crate::simulate_sirs).
 ///
 /// Counts are expected values and may be fractional. Every compartment must
 /// be finite and non-negative, and the total must be finite and strictly
@@ -29,7 +30,8 @@ pub struct SirState {
     pub susceptible: f64,
     /// Individuals who are currently infectious.
     pub infected: f64,
-    /// Individuals who have recovered and are assumed immune.
+    /// Individuals who have recovered and are immune: for good in SIR, until
+    /// their immunity wanes in SIRS.
     pub recovered: f64,
 }
 

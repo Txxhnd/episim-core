@@ -7,6 +7,7 @@
 //! - [`simulate_seir`]: susceptible, exposed, infected, recovered.
 //! - [`simulate_sis`]: susceptible, infected, and susceptible again, with no
 //!   immunity.
+//! - [`simulate_sirs`]: SIR with immunity that wanes.
 //!
 //! Each takes rate parameters in inverse days, an initial state in population
 //! counts, and [`SimulationSettings`] in days. They return a
@@ -15,11 +16,12 @@
 //!
 //! A fixed-step solver does not report how accurate a run is. To estimate
 //! the error the timestep introduces, use [`estimate_sir_step_error`],
-//! [`estimate_seir_step_error`] or [`estimate_sis_step_error`].
+//! [`estimate_seir_step_error`], [`estimate_sis_step_error`] or
+//! [`estimate_sirs_step_error`].
 //!
 //! The models assume a closed, homogeneously mixing population, constant
 //! parameters, and frequency-dependent transmission. Recovery gives permanent
-//! immunity in SIR and SEIR and none in SIS. The
+//! immunity in SIR and SEIR, immunity that wanes in SIRS, and none in SIS. The
 //! results describe the model under those assumptions; they are not
 //! forecasts or estimates of a real outbreak.
 
@@ -42,6 +44,7 @@ pub use error::SimulationError;
 pub use metrics::EpidemicMetrics;
 pub use models::seir::{SeirParameters, SeirState, estimate_seir_step_error, simulate_seir};
 pub use models::sir::{SirParameters, SirState, estimate_sir_step_error, simulate_sir};
+pub use models::sirs::{SirsParameters, estimate_sirs_step_error, simulate_sirs};
 pub use models::sis::{SisParameters, SisState, estimate_sis_step_error, simulate_sis};
 pub use result::{Observation, SimulationDiagnostics, SimulationResult};
 pub use settings::SimulationSettings;
