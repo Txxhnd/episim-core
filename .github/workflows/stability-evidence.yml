@@ -1,0 +1,21 @@
+name: Stability evidence
+
+# The measurement behind the timestep stability limits takes about three
+# minutes in release mode, so it is not part of the CI run on every push.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 1"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  evidence:
+    name: Stability evidence (release, ignored test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --release --test stability_evidence_tests -- --ignored --nocapture

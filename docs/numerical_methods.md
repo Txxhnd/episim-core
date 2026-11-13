@@ -166,6 +166,9 @@ compartment, so it is neither sign-checked nor summed into `N(t)`.
   that every accepted run is qualitatively right. The measurement is kept
   as an ignored test; repeat it with
   `cargo test --release --test stability_evidence_tests -- --ignored --nocapture`.
+  The GitHub Actions workflow "Stability evidence"
+  (`.github/workflows/stability-evidence.yml`) runs it every Monday and on
+  demand, with `gh workflow run "Stability evidence"`.
 - **Inaccuracy is not detected.** The limit is a stability guard, not an
   accuracy target. At the limit a run still has large errors: with
   `gamma * step = 2` the infected compartment falls to 33% per step where

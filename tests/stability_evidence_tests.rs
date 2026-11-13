@@ -24,6 +24,8 @@
 //!
 //! The measurement is ignored by default because it needs a release build to
 //! finish in about three minutes. `docs/numerical_methods.md` quotes its result.
+//! The workflow `.github/workflows/stability-evidence.yml` runs it every
+//! Monday and on demand.
 //!
 //! ```sh
 //! cargo test --release --test stability_evidence_tests -- --ignored --nocapture

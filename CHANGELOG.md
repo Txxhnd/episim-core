@@ -9,6 +9,11 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 The next minor release. Under Cargo's rules for 0.x versions it may change
 the public API; every breaking change is listed here.
 
+### Added
+
+- A GitHub Actions workflow, "Stability evidence", that runs the release-mode
+  stability evidence test every Monday and on demand.
+
 ### Fixed
 
 - `endemic_prevalence` is 0 for SIS, SIRS and SEIRS runs that start with
