@@ -236,6 +236,14 @@ are merged into one plan (018). The driver passing time to the derivative
 only matters once a schedule exists, and in that plan the driver passes the
 multiplier itself rather than the time.
 
+A finding while building plan 019 changed one earlier decision. The schedule
+evidence flagged one SIRS run, accepted by the SIRS limit of design 007,
+`max(beta + gamma, omega)`. Its first one-day step, before the schedule
+changed anything, ended 26% of the population away from a fine run. The
+owner chose (2026-11-14) to tighten the SIRS limit to `beta + gamma + omega`
+(plan 018), which design 007 had measured with no flags and no failed runs.
+This reverses design 007's decision 8.
+
 ## Open questions for the owner
 
 1. **What may vary?** A piecewise-constant multiplier on `beta` only, or also

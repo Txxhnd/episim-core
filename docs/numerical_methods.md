@@ -120,7 +120,7 @@ compartment, so it is neither sign-checked nor summed into `N(t)`.
   | SIR | `max(beta, gamma)` |
   | SEIR | `max(beta, (sigma + gamma) / 2 + sqrt(((sigma - gamma) / 2)^2 + sigma * beta))` |
   | SIS | `max(beta + gamma, 1.25 * gamma)` |
-  | SIRS | `max(beta + gamma, omega)` |
+  | SIRS | `beta + gamma + omega` |
   | SEIRS | `beta + sigma + gamma + omega` |
 
   Susceptibles empty at up to `beta` per day. In SEIR the exposed and
@@ -133,11 +133,13 @@ compartment, so it is neither sign-checked nor summed into `N(t)`.
   `1.25 * gamma` floor keeps `gamma * step` at most 1.6. Above about 1.62,
   with little transmission and many infected, the RK4 increment of the
   cumulative infections turns negative, so the count would step backwards.
-  In SIRS, recovered individuals also leave `R` at `omega`; the largest
-  single rate, `max(beta, gamma, omega)`, is not enough. SEIRS uses the
-  plain sum of its rates: formulas built from the SEIR coupled rate let
-  through runs in which `R` rises over a step where it should fall, because
-  the error along the fast `E -> I` chain lands in `R`.
+  SIRS and SEIRS use the plain sum of their rates. For SIRS,
+  `max(beta + gamma, omega)` is enough for stability but accepts steps
+  that are badly inaccurate when `omega` is close to `beta + gamma`: one run
+  found by the schedule evidence ended its first one-day step 26% of the
+  population away from a fine run. For SEIRS, formulas built from the SEIR
+  coupled rate let through runs in which `R` rises over a step where it
+  should fall, because the error along the fast `E -> I` chain lands in `R`.
   The step compared with the limit is the step actually taken: a duration
   shorter than the timestep is integrated in one step of that duration.
 
@@ -150,13 +152,14 @@ compartment, so it is neither sign-checked nor summed into `N(t)`.
   let the cumulative infections fall, or missed the fine run's incidence or
   final infected fraction by more than 0.1. With `beta + gamma` alone,
   113,098 runs are accepted and 374 are flagged. For SIRS, with `omega`
-  from a second generator, 106,450 runs are accepted and none moved a
-  compartment or the cumulative infections against the exact flow over a
-  step, or missed any final value by more than 0.1 N; with
-  `max(beta, gamma, omega)`, 212,468 are accepted and 2,410 flagged. Another
-  1,215 SIRS runs within the limit end with `NegativeCompartment` (1,210 in
-  `recovered`, 5 in `susceptible`), against 15 for SIR. Those runs fail
-  loudly, and their step is inaccurate anyway. For SEIRS the sum accepts
+  from a second generator, the sum accepts 35,922 runs, about one
+  configuration in seven at a one-day step. None moved a compartment or the
+  cumulative infections against the exact flow over a step, missed any final
+  value by more than 0.1 N, or failed with an error. At `beta = 0.3`,
+  `gamma = 0.1`, `omega = 0.01` it still allows a step of 4.9 days. The
+  earlier limit, `max(beta + gamma, omega)`, accepted 106,450 runs, of which
+  1,215 more ended with `NegativeCompartment`; `max(beta, gamma, omega)`
+  accepts 212,468 and flags 2,410. For SEIRS the sum accepts
   8,501 runs, about one configuration in 29 at a one-day step, with none
   flagged and none failing loudly; at `beta = 0.5`, `sigma = 0.2`,
   `gamma = 0.1`, `omega = 0.01` it still allows a step of 2.47 days. With

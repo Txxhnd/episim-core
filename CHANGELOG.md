@@ -14,6 +14,16 @@ the public API; every breaking change is listed here.
 - A GitHub Actions workflow, "Stability evidence", that runs the release-mode
   stability evidence test every Monday and on demand.
 
+### Changed
+
+- The SIRS stability limit is `beta + gamma + omega`, as for SEIRS, instead
+  of `max(beta + gamma, omega)`. The old limit accepted steps that ended a
+  quarter of the population away from the exact solution when `omega` was
+  close to `beta + gamma`, and 1,215 of the evidence's accepted runs failed
+  with `NegativeCompartment`. Steps it accepted may now return
+  `TimeStepTooLarge`; at typical rates the largest step barely changes
+  (4.9 days instead of 5 at `beta = 0.3`, `gamma = 0.1`, `omega = 0.01`).
+
 ### Fixed
 
 - `endemic_prevalence` is 0 for SIS, SIRS and SEIRS runs that start with
