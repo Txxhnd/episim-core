@@ -121,6 +121,7 @@ compartment, so it is neither sign-checked nor summed into `N(t)`.
   | SEIR | `max(beta, (sigma + gamma) / 2 + sqrt(((sigma - gamma) / 2)^2 + sigma * beta))` |
   | SIS | `max(beta + gamma, 1.25 * gamma)` |
   | SIRS | `max(beta + gamma, omega)` |
+  | SEIRS | `beta + sigma + gamma + omega` |
 
   Susceptibles empty at up to `beta` per day. In SEIR the exposed and
   infected compartments feed each other, so together they decay faster than
@@ -133,7 +134,10 @@ compartment, so it is neither sign-checked nor summed into `N(t)`.
   with little transmission and many infected, the RK4 increment of the
   cumulative infections turns negative, so the count would step backwards.
   In SIRS, recovered individuals also leave `R` at `omega`; the largest
-  single rate, `max(beta, gamma, omega)`, is not enough.
+  single rate, `max(beta, gamma, omega)`, is not enough. SEIRS uses the
+  plain sum of its rates: formulas built from the SEIR coupled rate let
+  through runs in which `R` rises over a step where it should fall, because
+  the error along the fast `E -> I` chain lands in `R`.
   The step compared with the limit is the step actually taken: a duration
   shorter than the timestep is integrated in one step of that duration.
 
@@ -152,7 +156,12 @@ compartment, so it is neither sign-checked nor summed into `N(t)`.
   `max(beta, gamma, omega)`, 212,468 are accepted and 2,410 flagged. Another
   1,215 SIRS runs within the limit end with `NegativeCompartment` (1,210 in
   `recovered`, 5 in `susceptible`), against 15 for SIR. Those runs fail
-  loudly, and their step is inaccurate anyway. With a limit at the stability boundary of 2.785 such
+  loudly, and their step is inaccurate anyway. For SEIRS the sum accepts
+  8,501 runs, about one configuration in 29 at a one-day step, with none
+  flagged and none failing loudly; at `beta = 0.5`, `sigma = 0.2`,
+  `gamma = 0.1`, `omega = 0.01` it still allows a step of 2.47 days. With
+  `max(beta + gamma, coupled rate, omega)`, 70,532 are accepted and 563
+  flagged. With a limit at the stability boundary of 2.785 such
   runs do occur, from a product of about 2.2. This is evidence, not a proof
   that every accepted run is qualitatively right. The measurement is kept
   as an ignored test; repeat it with

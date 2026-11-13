@@ -96,7 +96,7 @@ pub(crate) fn effective_reproduction_number(
 /// ```
 ///
 /// and `seed` is the number infected, plus for SEIR exposed, at the start.
-/// In both models `dS/dR = -R0 * S / N`, and everyone infected or exposed
+/// In SIR and SEIR `dS/dR = -R0 * S / N`, and everyone infected or exposed
 /// eventually recovers, which gives the equation.
 pub(crate) fn final_size_fraction(susceptible: f64, seed: f64, population: f64, r0: f64) -> f64 {
     // With no seed the equation has a second root that no epidemic reaches.

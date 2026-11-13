@@ -19,6 +19,8 @@ The first version. It has not been published yet.
 - `simulate_sirs` and `estimate_sirs_step_error`: SIR with immunity that
   wanes at rate `omega_per_day`, using `SirState`. It reports
   `endemic_prevalence` and a herd-immunity threshold, and no final size.
+- `simulate_seirs` and `estimate_seirs_step_error`: SEIR with immunity that
+  wanes, using `SeirState`, with the same metrics as SIRS.
 - A fixed-step classical fourth-order Runge-Kutta solver shared by all
   models. The final step is shortened so a run ends exactly at the requested
   duration.

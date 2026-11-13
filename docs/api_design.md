@@ -12,14 +12,15 @@ private.
 | `simulate_seir` | function | Run an SEIR simulation. |
 | `simulate_sis` | function | Run an SIS simulation. |
 | `simulate_sirs` | function | Run an SIRS simulation; returns `SirState` observations. |
-| `estimate_sir_step_error`, `estimate_seir_step_error`, `estimate_sis_step_error`, `estimate_sirs_step_error` | function | Estimate the error the timestep introduces, by comparing with a run at half the step. |
-| `SirParameters`, `SeirParameters`, `SisParameters`, `SirsParameters` | struct | Rate parameters, per day. |
-| `SirState`, `SeirState`, `SisState` | struct | Compartment values (`SirState` also for SIRS); used for the initial state and for each observation. |
+| `simulate_seirs` | function | Run an SEIRS simulation; returns `SeirState` observations. |
+| `estimate_sir_step_error`, `estimate_seir_step_error`, `estimate_sis_step_error`, `estimate_sirs_step_error`, `estimate_seirs_step_error` | function | Estimate the error the timestep introduces, by comparing with a run at half the step. |
+| `SirParameters`, `SeirParameters`, `SisParameters`, `SirsParameters`, `SeirsParameters` | struct | Rate parameters, per day. |
+| `SirState`, `SeirState`, `SisState` | struct | Compartment values (`SirState` also for SIRS, `SeirState` also for SEIRS); used for the initial state and for each observation. |
 | `SimulationSettings` | struct | Duration, timestep, and step limit. |
 | `SimulationResult<S>` | struct | Trajectory, metrics, and diagnostics. |
 | `Observation<S>` | struct | A time in days, the cumulative infections since day zero, and the state at that time. |
 | `EpidemicMetrics` | struct | Model-derived summary metrics. |
-| `SirParameters::effective_reproduction_number`, `SeirParameters::effective_reproduction_number`, `SisParameters::effective_reproduction_number`, `SirsParameters::effective_reproduction_number` | method | Model-derived effective reproduction number `R0 * S / N` in a given state. |
+| `SirParameters::effective_reproduction_number`, `SeirParameters::effective_reproduction_number`, `SisParameters::effective_reproduction_number`, `SirsParameters::effective_reproduction_number`, `SeirsParameters::effective_reproduction_number` | method | Model-derived effective reproduction number `R0 * S / N` in a given state. |
 | `SimulationDiagnostics` | struct | Step count, population drift, tolerated negative values. |
 | `StepErrorEstimate` | struct | Estimated largest absolute and relative error of a run. |
 | `SimulationError` | enum | Every failure the library can report. |

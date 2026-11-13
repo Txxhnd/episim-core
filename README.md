@@ -1,7 +1,7 @@
 # episim-core
 
 A small Rust library for deterministic epidemiological simulation. It
-integrates the SIR, SEIR, SIS and SIRS compartmental models with a fixed-step classical
+integrates the SIR, SEIR, SIS, SIRS and SEIRS compartmental models with a fixed-step classical
 fourth-order Runge-Kutta (RK4) solver and returns the full trajectory, a few
 model-derived metrics, and numerical diagnostics.
 
@@ -63,8 +63,9 @@ fn main() -> Result<(), SimulationError> {
 SEIR works the same way through `simulate_seir`, `SeirParameters`, and
 `SeirState`, and SIS through `simulate_sis`, `SisParameters`, and
 `SisState`, and SIRS through `simulate_sirs`, `SirsParameters` (with the
-rate `omega_per_day` at which immunity wanes), and `SirState`. In SIS
-recovery gives no immunity and in SIRS immunity wanes, so instead of a final
+rate `omega_per_day` at which immunity wanes), and `SirState`; SEIRS takes
+`SeirsParameters` and `SeirState`. In SIS recovery gives no immunity and in
+SIRS and SEIRS immunity wanes, so instead of a final
 size their metrics report `endemic_prevalence`, the fraction infected once
 the infection settles. Two runnable examples print a fuller summary:
 
@@ -124,7 +125,7 @@ All models assume:
 2. Homogeneous mixing.
 3. Parameters that stay constant for the whole simulation.
 4. Permanent immunity after recovery in SIR and SEIR, immunity that wanes
-   in SIRS, and none in SIS.
+   in SIRS and SEIRS, and none in SIS.
 5. Transmission only from the infected compartment.
 6. Deterministic dynamics, with fractional "expected" population counts.
 
@@ -135,13 +136,14 @@ is not the clinical incubation period.
 
 ## Scope and limitations
 
-Version 0.1.0 contains the SIR, SEIR, SIS and SIRS models and one solver. It has no
+Version 0.1.0 contains the SIR, SEIR, SIS, SIRS and SEIRS models and one
+solver. It has no
 command-line interface, serialization, stochastic or agent-based models, age
 structure, interventions, time-varying parameters, parameter fitting, or
 estimation of `Rt` from case data.
 
 The solver uses a fixed step and has no error control. Choose a step that is
-small compared with `1 / beta`, `1 / sigma`, and `1 / gamma`. A run is
+small compared with `1 / beta`, `1 / sigma`, `1 / gamma`, and `1 / omega`. A run is
 rejected with `TimeStepTooLarge` if the model's fastest decay rate times the
 step exceeds 2, because RK4 damps too weakly beyond that and can turn decay
 into growth; the error reports the largest step that would be accepted. A run
