@@ -376,6 +376,24 @@ mod tests {
     }
 
     #[test]
+    fn metrics_final_size_keeps_tiny_seeds_near_the_threshold() {
+        // Issue #7: R0 = 1, a whole susceptible population and a seed of
+        // 1e-16 to 1e-24. The references come from a 90-digit bisection of
+        // the final size equation; the seed must not be lost to rounding.
+        for (seed, expected) in [
+            (1e-16, 1.4142135457064284e-8),
+            (1e-20, 1.4142135622064284e-10),
+            (1e-24, 1.4142135623714284e-12),
+        ] {
+            let fraction = final_size_fraction(1.0, seed, 1.0 + seed, 1.0);
+            assert!(
+                (fraction / expected - 1.0).abs() < 1e-6,
+                "seed {seed:e}: {fraction:e} vs {expected:e}"
+            );
+        }
+    }
+
+    #[test]
     fn metrics_final_size_is_zero_without_seed_transmission_or_susceptibles() {
         // Nobody to start an epidemic, no transmission, or nobody to infect.
         assert_eq!(final_size_fraction(990.0, 0.0, 1000.0, 3.0), 0.0);

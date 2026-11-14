@@ -559,3 +559,37 @@ fn seir_effective_reproduction_number_rejects_invalid_input() {
         SimulationError::InvalidPopulation
     );
 }
+
+#[test]
+fn seir_stability_decision_does_not_depend_on_the_time_unit() {
+    // Issue #6: scaling every rate by a factor and every time by its inverse
+    // leaves the system unchanged, so the stability limit must accept and
+    // reject the same scaled steps. With beta = sigma = gamma the coupled
+    // rate is twice the common rate: a scaled step of 0.25 is accepted, 1.5
+    // is rejected with a largest step of 1 (in scaled units).
+    let initial = SeirState {
+        susceptible: 980.0,
+        exposed: 8.0,
+        infected: 10.0,
+        recovered: 2.0,
+    };
+    for scale in [1.0, 1e160, 1e-200] {
+        let parameters = SeirParameters {
+            beta_per_day: scale,
+            sigma_per_day: scale,
+            gamma_per_day: scale,
+        };
+        let run =
+            |step: f64| simulate_seir(parameters, initial, settings(step / scale, step / scale));
+        assert!(run(0.25).is_ok(), "scale {scale:e}");
+        match run(1.5) {
+            Err(SimulationError::TimeStepTooLarge { max_step_days }) => {
+                assert!(
+                    (max_step_days * scale - 1.0).abs() < 1e-12,
+                    "scale {scale:e}: {max_step_days}"
+                );
+            }
+            other => panic!("scale {scale:e}: {other:?}"),
+        }
+    }
+}

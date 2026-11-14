@@ -346,3 +346,63 @@ fn multiplier_times_effective_r_sets_the_direction_of_the_infected() {
         }
     }
 }
+
+#[test]
+fn multiplier_at_an_observation_matches_the_step_that_starts_there() {
+    // Issue #4: with a step of 0.3, the observation at index 3 is recorded at
+    // 3 * 0.3 = 0.8999999999999999, while the change is on day 0.9. The
+    // integration applies the change from that step on, and so must
+    // multiplier_at, for the effective-R recipe to agree with the run.
+    let schedule = TransmissionSchedule::new(&[(0.9, 0.1)]).unwrap();
+    let result = simulate_sir(SIR, SIR0, scheduled(1.2, 0.3, schedule.clone())).unwrap();
+    let boundary = result.trajectory[3];
+    assert_eq!(schedule.multiplier_at(boundary.time_days), 0.1);
+    let r = schedule.multiplier_at(boundary.time_days)
+        * SIR.effective_reproduction_number(&boundary.state).unwrap();
+    let change = result.trajectory[4].state.infected - boundary.state.infected;
+    assert!(r < 1.0 && change < 0.0, "R {r}, change {change}");
+
+    // Every decimal step and change day on its grid: the observation at the
+    // change's step index already reports the new multiplier, and the one
+    // before it the old one.
+    for step in [0.1, 0.3, 0.7] {
+        for multiple in 1..200_usize {
+            let day: f64 = format!("{:.2}", multiple as f64 * step).parse().unwrap();
+            let schedule = TransmissionSchedule::new(&[(day, 0.5)]).unwrap();
+            assert!(
+                settings(day + 1.0, step)
+                    .with_transmission_schedule(schedule.clone())
+                    .is_ok()
+            );
+            assert_eq!(
+                schedule.multiplier_at(multiple as f64 * step),
+                0.5,
+                "day {day}"
+            );
+            assert_eq!(
+                schedule.multiplier_at((multiple - 1) as f64 * step),
+                1.0,
+                "day {day}"
+            );
+        }
+    }
+}
+
+#[test]
+fn dense_schedule_gives_the_same_run_as_no_schedule() {
+    // Issue #5: a change at every step must cost a lookup, not a scan of all
+    // changes per step. With every multiplier 1 the run is unchanged.
+    let steps = 5_000;
+    let plain = settings(steps as f64, 1.0)
+        .with_record_every(steps)
+        .unwrap();
+    let changes: Vec<_> = (1..=steps).map(|day| (day as f64, 1.0)).collect();
+    let dense = plain
+        .clone()
+        .with_transmission_schedule(TransmissionSchedule::new(&changes).unwrap())
+        .unwrap();
+    assert_eq!(
+        simulate_sir(SIR, SIR0, dense).unwrap(),
+        simulate_sir(SIR, SIR0, plain).unwrap()
+    );
+}
