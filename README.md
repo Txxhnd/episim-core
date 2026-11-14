@@ -29,7 +29,7 @@ The crate is not published on crates.io yet, so depend on a release tag:
 
 ```toml
 [dependencies]
-episim-core = { git = "https://github.com/Txxhnd/episim-core", tag = "v0.2.0" }
+episim-core = { git = "https://github.com/Txxhnd/episim-core", tag = "v0.2.1" }
 ```
 
 ```rust

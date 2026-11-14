@@ -4,7 +4,10 @@ All notable changes to this project are recorded in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.1] - 2026-11-14
+
+A patch release, compatible with 0.2.0: four fixes and package metadata.
+Tagged `v0.2.1`; not published to crates.io.
 
 ### Fixed
 
