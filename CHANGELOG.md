@@ -4,6 +4,29 @@ All notable changes to this project are recorded in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `TransmissionSchedule::multiplier_at` agrees with the multiplier the run
+  applies at a recorded time on a decimal step grid: a change on day 0.9 now
+  counts at the recorded time `3 * 0.3 = 0.8999999999999999`, within the
+  same four-ulp tolerance as the step-grid check (issue #4).
+- A schedule's multiplier is found by binary search, so a schedule with a
+  change at every step no longer costs a scan of all changes per step
+  (40,000 changes: 2.4 s before, 27 ms after; issue #5).
+- The SEIR stability limit computes the coupled rate on rates scaled by a
+  power of two, so it no longer overflows or underflows when every rate is
+  scaled by a very large or very small factor. Ordinary inputs give the same
+  limit to the last bit (issue #6).
+- `final_size_fraction` solves for the newly infected fraction directly,
+  with a series for `exp(-x) - 1 + x` near the threshold, so tiny seeds near
+  `R0 = 1` are no longer lost to rounding (issue #7).
+
+### Added
+
+- `repository` in the package metadata.
+
 ## [0.2.0] - 2026-11-14
 
 Transmission schedules for every model, a stricter SIRS stability limit, and

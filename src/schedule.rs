@@ -52,18 +52,23 @@ impl TransmissionSchedule {
     }
 
     /// The multiplier in force on `day`: that of the latest change on or
-    /// before `day`, or 1 before the first change.
+    /// before `day`, or 1 before the first change. A change counts as on or
+    /// before `day` within four units in the last place of the change day,
+    /// the tolerance `with_transmission_schedule` allows for the step grid,
+    /// so a recorded time such as `3 * 0.3 = 0.8999999999999999` reports the
+    /// multiplier the run applied from day 0.9 on.
     ///
     /// Multiply the model-derived effective reproduction number of a state
     /// (for example
     /// [`SirParameters::effective_reproduction_number`](crate::SirParameters::effective_reproduction_number))
     /// by this value to get the effective reproduction number on that day.
     pub fn multiplier_at(&self, day: f64) -> f64 {
-        self.changes
-            .iter()
-            .rev()
-            .find(|&&(change_day, _)| change_day <= day)
-            .map_or(1.0, |&(_, multiplier)| multiplier)
+        let in_force = self.changes.partition_point(|&(change_day, _)| {
+            change_day - day <= 4.0 * f64::EPSILON * change_day
+        });
+        in_force
+            .checked_sub(1)
+            .map_or(1.0, |last| self.changes[last].1)
     }
 
     /// The `(day, multiplier)` changes, in order.

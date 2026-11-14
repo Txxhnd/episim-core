@@ -143,12 +143,15 @@ impl SimulationSettings {
     /// are matched by step index, not by comparing times, so rounding in
     /// `index * step` cannot move a step into the wrong segment.
     pub(crate) fn multiplier_for_step(&self, start_index: usize) -> f64 {
-        self.transmission_schedule
-            .iter()
-            .flat_map(TransmissionSchedule::changes)
-            .rev()
-            .find(|&&(day, _)| (day / self.step_days).round() <= start_index as f64)
-            .map_or(1.0, |&(_, multiplier)| multiplier)
+        let Some(schedule) = &self.transmission_schedule else {
+            return 1.0;
+        };
+        // The days increase, so their step indices do too: a binary search
+        // keeps a dense schedule from costing a scan per step.
+        let changes = schedule.changes();
+        let in_force = changes
+            .partition_point(|&(day, _)| (day / self.step_days).round() <= start_index as f64);
+        in_force.checked_sub(1).map_or(1.0, |last| changes[last].1)
     }
 
     /// Largest multiplier in force at any time during the run, at least 1.

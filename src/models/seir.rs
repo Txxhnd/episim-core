@@ -227,9 +227,21 @@ impl Model<5> for SeirParameters {
         // transmission), so together they decay faster than sigma or gamma alone.
         // This is the fast eigenvalue of that pair in a fully susceptible
         // population, where the coupling is strongest.
-        let coupled_rate = (sigma_per_day + gamma_per_day) / 2.0
-            + (((sigma_per_day - gamma_per_day) / 2.0).powi(2) + sigma_per_day * beta_per_day)
-                .sqrt();
+        // Computed on rates divided by a power of two near the largest, which is
+        // exact, so the squares and products cannot overflow or underflow.
+        let scale = beta_per_day
+            .max(sigma_per_day)
+            .max(gamma_per_day)
+            .log2()
+            .floor()
+            .exp2();
+        let (beta, sigma, gamma) = (
+            beta_per_day / scale,
+            sigma_per_day / scale,
+            gamma_per_day / scale,
+        );
+        let coupled_rate = scale
+            * ((sigma + gamma) / 2.0 + (((sigma - gamma) / 2.0).powi(2) + sigma * beta).sqrt());
         // Susceptibles empty at up to beta per day.
         beta_per_day.max(coupled_rate)
     }

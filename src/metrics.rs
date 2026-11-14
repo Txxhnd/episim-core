@@ -106,11 +106,23 @@ pub(crate) fn final_size_fraction(susceptible: f64, seed: f64, population: f64, 
         return 0.0;
     }
     // Solved in fractions of N, so that R0 times a population near f64::MAX
-    // cannot overflow.
+    // cannot overflow, and for the newly infected fraction z = (S(0) - S(inf)) / N
+    // directly: z = s0 * (1 - exp(-R0 * (z + i0))). With exp_m1 and the seed
+    // kept apart from s0, a tiny seed is not lost to rounding near R0 = 1.
     let (susceptible, seed) = (susceptible / population, seed / population);
-    let gap =
-        |remaining: f64| remaining - susceptible * (-r0 * (susceptible + seed - remaining)).exp();
-    // gap(0) < 0 <= gap(S(0)) and gap is concave, so exactly one root lies
+    let gap = |infected: f64| {
+        let exponent = r0 * (infected + seed);
+        if exponent < 1e-2 {
+            // Near R0 = 1 the root is tiny and z + s0 * exp_m1(-x) cancels to
+            // far below its terms; with exp(-x) - 1 + x as a series the large
+            // terms cancel algebraically instead.
+            infected * (1.0 - susceptible * r0) - susceptible * r0 * seed
+                + susceptible * exp_minus_one_plus(exponent)
+        } else {
+            infected + susceptible * (-exponent).exp_m1()
+        }
+    };
+    // gap(0) < 0 < gap(s0) and gap is convex, so exactly one root lies
     // between; bisection narrows it to adjacent floating-point values.
     let (mut low, mut high) = (0.0_f64, susceptible);
     loop {
@@ -124,7 +136,19 @@ pub(crate) fn final_size_fraction(susceptible: f64, seed: f64, population: f64, 
             high = middle;
         }
     }
-    susceptible - high
+    high
+}
+
+/// `exp(-x) - 1 + x` for `0 <= x < 0.01`, by its Taylor series
+/// `x^2/2 - x^3/6 + ...`; twelve terms are exact to rounding there.
+fn exp_minus_one_plus(x: f64) -> f64 {
+    let mut term = x * x / 2.0;
+    let mut sum = term;
+    for n in 3..=12 {
+        term *= -x / n as f64;
+        sum += term;
+    }
+    sum
 }
 
 /// Derives the metrics every model shares from a recorded trajectory,
