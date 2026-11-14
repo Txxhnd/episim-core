@@ -132,6 +132,21 @@ measurable difference. Memory use was not measured; the trajectory accounts
 for 40 bytes (SIR) or 48 bytes (SEIR) per recorded step. SIS, SIRS and SEIRS
 are not benchmarked.
 
+For release 0.2.0 (2026-11-14, rustc 1.100.0) the same workloads were run on
+the 0.1.0 code and the 0.2.0 code back to back, with these medians:
+
+| | SIR, 10k / 100k / 1M steps | SEIR, 10k / 100k / 1M steps |
+|---|---|---|
+| 0.1.0 | 0.91 / 8.6 / 88 ms | 0.86 / 18.5 / 170 ms |
+| 0.2.0 | 1.59 / 12.4 / 99 ms | 0.85 / 10.4 / 110 ms |
+
+The machine was much noisier than on 2026-11-13: several confidence
+intervals were 20% to 40% wide, and 0.1.0 came out slower than 0.2.0 for
+SEIR. The comparison shows no consistent difference. The per-step cost
+0.2.0 adds, a transmission-multiplier lookup that is empty without a
+schedule, is too small to measure here. The 0.1.0 table above remains the
+reference baseline.
+
 The timesteps differ between rows so that each run covers a similar span of
 an active outbreak. An earlier run that kept the timestep at 1/64 day and
 stretched the 1,000,000-step case to 15,625 simulated days took 560 ms for

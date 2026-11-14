@@ -4,10 +4,12 @@ All notable changes to this project are recorded in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - unreleased
+## [0.2.0] - 2026-11-14
 
-The next minor release. Under Cargo's rules for 0.x versions it may change
-the public API; every breaking change is listed here.
+Transmission schedules for every model, a stricter SIRS stability limit, and
+fixes to three metrics and the step-error estimate. Under Cargo's rules for
+0.x versions this release may change the public API; the one breaking change
+is marked below. Tagged `v0.2.0`; not published to crates.io.
 
 ### Added
 
