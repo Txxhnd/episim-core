@@ -1,9 +1,15 @@
 # episim-core
 
 A small Rust library for deterministic epidemiological simulation. It
-integrates the SIR, SEIR, SIS, SIRS and SEIRS compartmental models with a fixed-step classical
-fourth-order Runge-Kutta (RK4) solver and returns the full trajectory, a few
-model-derived metrics, and numerical diagnostics.
+integrates the SIR, SEIR, SIS, SIRS and SEIRS compartmental models with a
+fixed-step classical fourth-order Runge-Kutta (RK4) solver, optionally with a
+schedule of interventions that change transmission over time. It returns the
+full trajectory, model-derived metrics, and numerical diagnostics.
+
+It is a small, dependency-free library with checked numerics, for embedding
+in Rust programs and for teaching. It is not a replacement for broader tools
+such as EpiModel or `{epidemics}` in R, which add stochastic, network and
+age-structured models and adaptive solvers.
 
 - Pure Rust, no runtime dependencies, no `unsafe` code.
 - The simulation functions and the settings constructors return a `Result`
@@ -19,11 +25,11 @@ calibrated against, or an estimate of, any real-world outbreak.
 
 ## Quick start
 
-The crate is not published on crates.io yet, so depend on it by path or git:
+The crate is not published on crates.io yet, so depend on a release tag:
 
 ```toml
 [dependencies]
-episim-core = { path = "../episim-core" }
+episim-core = { git = "https://github.com/Txxhnd/episim-core", tag = "v0.2.0" }
 ```
 
 ```rust
@@ -65,9 +71,9 @@ SEIR works the same way through `simulate_seir`, `SeirParameters`, and
 `SisState`, and SIRS through `simulate_sirs`, `SirsParameters` (with the
 rate `omega_per_day` at which immunity wanes), and `SirState`; SEIRS takes
 `SeirsParameters` and `SeirState`. In SIS recovery gives no immunity and in
-SIRS and SEIRS immunity wanes, so instead of a final
-size their metrics report `endemic_prevalence`, the fraction infected once
-the infection settles. Two runnable examples print a fuller summary:
+SIRS and SEIRS immunity wanes, so instead of a final size their metrics
+report `endemic_prevalence`, the fraction infected once the infection
+settles. Two runnable examples print a fuller summary:
 
 ```sh
 cargo run --example basic_sir
@@ -104,9 +110,9 @@ Change days must fall on the step grid (a whole number of steps), so that
 every step sees a single transmission rate. `SimulationSettings` holds the
 schedule, so it is `Clone` but not `Copy`; clone settings to reuse them.
 
-Two more examples are meant for teaching. One prints a whole outbreak as CSV, one row
-per day, to chart in a spreadsheet; the other prints a table of how peak,
-timing and final size change with R0:
+Two more examples are meant for teaching. One prints a whole outbreak as
+CSV, one row per day, to chart in a spreadsheet; the other prints a table of
+how peak, timing and final size change with R0:
 
 ```sh
 cargo run --example outbreak_curve > outbreak.csv
@@ -120,7 +126,7 @@ cargo run --example r0_sweep
 | Field | Contents |
 |---|---|
 | `trajectory` | One `Observation` (time in days, cumulative infections since day zero, and the model state) for day zero and for every recorded integration step: every step by default, or every N-th step with `SimulationSettings::with_record_every`. The last one is always the final state, exactly at the requested duration. |
-| `metrics` | Basic reproduction number `R0 = beta / gamma` and the herd-immunity threshold `1 - 1/R0`, peak infectious population and the day it is first reached, new infections since the start, `C(T)`, and that number as a fraction of the initial population, and the fraction the model infects by the time the epidemic is over (its final size). |
+| `metrics` | Basic reproduction number `R0 = beta / gamma`; peak infectious population and the day it is first reached; new infections since the start, `C(T)`, and that number per head of the initial population. Metrics that only some models define are `Option`s: the herd-immunity threshold `1 - 1/R0` (not SIS), the final size, the fraction infected by the end of the epidemic (SIR and SEIR without a varying schedule), and `endemic_prevalence`, the fraction infected at the endemic equilibrium (SIS, SIRS and SEIRS). |
 | `diagnostics` | Steps executed, the largest absolute and relative population drift, and how many recorded values were negative within roundoff tolerance. |
 
 Peak metrics are read from the recorded observations, so their time
@@ -142,6 +148,10 @@ for observation in result.trajectory.iter().step_by(40) {
 }
 # Ok::<(), SimulationError>(())
 ```
+
+With a transmission schedule, multiply by
+`schedule.multiplier_at(observation.time_days)` to get the effective R the
+run applied from that time on.
 
 All of these are properties of the model. They are not estimates from case
 data: in particular, the model's effective R is not the `Rt` that
@@ -168,16 +178,16 @@ is not the clinical incubation period.
 ## Scope and limitations
 
 The library contains the SIR, SEIR, SIS, SIRS and SEIRS models and one
-solver. It has no command-line interface, serialization, stochastic or agent-based
-models, age structure, smoothly varying parameters such as seasonality,
-parameter fitting, or estimation of `Rt` from case data. Interventions are
-modelled only as step changes in the transmission rate.
+solver. It has no command-line interface, serialization, stochastic or
+agent-based models, age structure, smoothly varying parameters such as
+seasonality, parameter fitting, or estimation of `Rt` from case data.
+Interventions are modelled only as step changes in the transmission rate.
 
 The solver uses a fixed step and has no error control. Choose a step that is
-small compared with `1 / beta`, `1 / sigma`, `1 / gamma`, and `1 / omega`. A run is
-rejected with `TimeStepTooLarge` if the model's fastest decay rate times the
-step exceeds 2, because RK4 damps too weakly beyond that and can turn decay
-into growth; the error reports the largest step that would be accepted. A run
+small compared with `1 / beta`, `1 / sigma`, `1 / gamma`, and `1 / omega`.
+A run is rejected with `TimeStepTooLarge` if the model's fastest decay rate
+times the step exceeds 2, because RK4 damps too weakly beyond that and can
+turn decay into growth; the error reports the largest step that would be accepted. A run
 also stops with an error if a value becomes non-finite, a compartment goes
 materially negative, or the population drifts. Below that limit a coarse
 step is still inaccurate, and a plain run does not tell you so. To find out
@@ -205,10 +215,11 @@ assert!(estimate.max_absolute_error < 1e-3);
 # Ok::<(), SimulationError>(())
 ```
 
-`estimate_seir_step_error` does the same for SEIR. The estimate reruns the
-simulation with every step split in two and compares the two, so it costs about three
-times as much as one run. It measures the error from the step size only,
-not how well the model matches reality.
+Every model has an `estimate_*_step_error` function. The estimate reruns the
+simulation with every step split in two and compares the two runs, so it
+costs about three times as much as one run. It measures the error from the
+step size only, not how well the model matches reality.
+
 Every recorded observation is kept in memory (40 bytes each for SIR, 48 for
 SEIR). To use a small step without storing every step, record every N-th
 one:
@@ -234,6 +245,10 @@ steps unless you raise the limit with `SimulationSettings::with_max_steps`.
 - [Architecture](docs/architecture.md): module layout, data flow, and the
   performance baseline.
 - [API design](docs/api_design.md): public types, conventions, and errors.
+- [Changelog](CHANGELOG.md): what changed in each release.
+- [Design studies](design/): the measurements and decisions behind the
+  waning-immunity models and transmission schedules, and a competitive
+  review.
 
 API reference: `cargo doc --no-deps --open`.
 
@@ -244,10 +259,17 @@ Requires Rust 1.85 or newer.
 ```sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-targets
-cargo test --doc
-cargo doc --no-deps --all-features
+cargo test
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 cargo bench
+```
+
+CI runs the first four on every push, and the tests again on Rust 1.85. The
+evidence behind the step-size limits is an ignored test that takes about
+four minutes in release mode; a separate workflow runs it every Monday:
+
+```sh
+cargo test --release --test stability_evidence_tests -- --ignored --nocapture
 ```
 
 ## License
