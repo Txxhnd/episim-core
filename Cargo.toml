@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.85"
 description = "A lightweight epidemiological simulation engine"
 readme = "README.md"
+repository = "https://github.com/Txxhnd/episim-core"
 license = "MIT"
 keywords = ["epidemiology", "simulation", "sir", "seir", "ode"]
 categories = ["science", "simulation", "mathematics"]
